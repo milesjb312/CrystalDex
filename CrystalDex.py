@@ -60,11 +60,11 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal Screen","Index","PEG Custom","PEG Ion","Salt Rx","Wizard"]
-        token = 'mSbVj4CqgpxJ2mIra4SLd5espAZG8kW0'
+        token = 'Wh49wZSwKJprumuyTa1BMPgPKmoGIkHw'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
-    def load_SeBaView_path():
+    def load_SeBaView_path(self):
         exe_path = None
         if os.path.exists("SeBaView_path_file.json"):
             with open("SeBaView_path_file.json", "r") as s:
@@ -158,11 +158,11 @@ class CrystalDex_main:
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
-                self.client.uploads.upload_file(
-                    box_sdk_gen.UploadFileAttributes(
-                        name="Crystal_Trays_Library.xlsx", parent=box_sdk_gen.UploadFileAttributesParentField(id="320928486478")
-                    ),
-                    file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
+                self.client.uploads.upload_file_version(
+                        attributes=box_sdk_gen.UploadFileAttributesParentField(name="Crystal_Trays_Library",
+                                                                                id="1862599427539"),
+                        file_id="1862599427539",
+                        file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
                 )
             self.load_SeBaView_path()
 
