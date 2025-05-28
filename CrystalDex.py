@@ -110,10 +110,9 @@ class CrystalDex_main:
             #Each of these needs to be nested inside some useful function that will be called when the user tries to take a picture.
             main_window.click_input(coords=(36,59)) #This accesses the file button.
             main_window.click_input(coords=(84, 224))  #This accesses the camera connecting button.
-            main_window.click_input(coords=(76, 236))  #This accesses the save as button.
+            main_window.click_input(coords=(76, 236))  #This accesses the save button, which may be useless.
+            main_window.click_input(coords=(81, 202))  #This accesses the save as button.
             #main_window.type_keys("filename.txt{ENTER}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
-            main_window.click_input(coords=(81, 202))  #This accesses the save button.            
-            
 
     def add_menu(self):
         menu = Menu(self.root)
