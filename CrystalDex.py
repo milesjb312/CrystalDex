@@ -21,6 +21,7 @@ import os
 import json
 from openpyxl import Workbook, load_workbook
 from datetime import datetime
+import time
 
 #GUI imports
 #https://tkdocs.com/tutorial/intro.html#audience
@@ -37,8 +38,12 @@ from box_sdk_gen import BoxClient, BoxDeveloperTokenAuth
 
 #SebaView integration imports:
 #https://codezup.com/automate-windows-tasks-with-python-win32-library/
+#https://pywinauto.readthedocs.io/en/latest/getting_started.html
 import pywinauto
 from pywinauto.application import Application
+from pywinauto.timings import wait_until
+import pyautogui
+from pynput import mouse
 
 #Packaging stuff:
 #https://realpython.com/pyinstaller-python/
@@ -46,6 +51,13 @@ from pywinauto.application import Application
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))
 icon_path = os.path.join(script_dir,"crystaldex_icon.png")
+
+def on_click(x,y,button,pressed):
+                global mouse_is_down
+                mouse_is_down = pressed
+
+listener = mouse.Listener(on_click=on_click)
+listener.start()
 
 class CrystalDex_main:
     def __init__(self):
@@ -60,7 +72,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal Screen","Index","PEG Custom","PEG Ion","Salt Rx","Wizard"]
-        token = 'Wh49wZSwKJprumuyTa1BMPgPKmoGIkHw'
+        token = 'YRhsy7jH10D2HK6cp1hduo432ufmxKtX'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -78,10 +90,30 @@ class CrystalDex_main:
         if exe_path:
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
-        if exe_path:
             app = Application(backend="uia").start(exe_path)
-            main_window = app.window(title_re=".*SeBaView.*")
-            main_window.wait('visible')
+            main_window = app.windows()[1]
+            main_window.set_focus()
+            """
+            #This code is really buggy and needs to be moved to another section, but it's useful for figuring out the location of buttons in SeBaView.
+            main_window_rect = main_window.rectangle()
+            try:
+                while True:
+                    if mouse_is_down:
+                        x, y = pyautogui.position()
+                        rel_x = x - main_window_rect.left
+                        rel_y = y - main_window_rect.top
+                        print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
+                    time.sleep(0.1)
+            except KeyboardInterrupt:
+                pass
+            """
+            #Each of these needs to be nested inside some useful function that will be called when the user tries to take a picture.
+            main_window.click_input(coords=(36,59)) #This accesses the file button.
+            main_window.click_input(coords=(84, 224))  #This accesses the camera connecting button.
+            main_window.click_input(coords=(76, 236))  #This accesses the save as button.
+            #main_window.type_keys("filename.txt{ENTER}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
+            main_window.click_input(coords=(81, 202))  #This accesses the save button.            
+            
 
     def add_menu(self):
         menu = Menu(self.root)
@@ -157,13 +189,26 @@ class CrystalDex_main:
                 short_title = full_title[:26]
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
+                all_tags = [date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values]
+                new_worksheet['K1'] = ','.join(map(str,all_tags))
+                new_worksheet['D1'] = str(date_set_var)
+                new_worksheet['D2'] = str(crystallization_chaperone_var)
+                new_worksheet['D3'] = str(crystal_screen_var)
+                new_worksheet['D4'] = str(target_protein_var)
+                new_worksheet['D5'] = str(custom_tags_values)
+                new_worksheet['H1'] = str(target_protein_top_left_stock_concentration_var)
+                new_worksheet['H2'] = str(target_protein_top_right_stock_concentration_var)
+                new_worksheet['H3'] = str(target_protein_bottom_left_stock_concentration_var)
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
+                """
+                Re-enable these lines once ready to attach to Box.
                 self.client.uploads.upload_file_version(
-                        attributes=box_sdk_gen.UploadFileAttributesParentField(name="Crystal_Trays_Library",
-                                                                                id="1862599427539"),
-                        file_id="1862599427539",
-                        file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
+                    attributes=box_sdk_gen.UploadFileAttributesParentField(name="Crystal_Trays_Library.xlsx",
+                        id="1862599427539"),
+                    file_id="1862599427539",
+                    file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
                 )
+                """
             self.load_SeBaView_path()
 
     def New_Tray(self):
@@ -236,9 +281,9 @@ class CrystalDex_main:
                        date_set_var.get(),
                        crystal_screen_var.get(),
                        target_protein_var.get(),
-                       target_protein_top_left_stock_concentration_var,
-                       target_protein_top_right_stock_concentration_var,
-                       target_protein_bottom_left_stock_concentration_var,
+                       target_protein_top_left_stock_concentration_var.get(),
+                       target_protein_top_right_stock_concentration_var.get(),
+                       target_protein_bottom_left_stock_concentration_var.get(),
                        crystallization_chaperone_var.get(),
                        custom_tags_var.get()
                         )
