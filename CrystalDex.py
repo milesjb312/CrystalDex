@@ -137,9 +137,9 @@ class CrystalDex_main:
             for i in range(2):
                 wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
             #wrapper.click_input(coords=(76, 236))  #This accesses the save button, which may be useless.
-            self.take_pictures(wrapper,'test_image')
+            self.take_picture(wrapper,'test_image')
 
-    def take_pictures(self,wrapper,image_title):
+    def take_picture(self,wrapper,image_title):
         wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
