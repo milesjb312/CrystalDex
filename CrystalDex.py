@@ -39,11 +39,13 @@ from box_sdk_gen import BoxClient, BoxDeveloperTokenAuth
 #SebaView integration imports:
 #https://codezup.com/automate-windows-tasks-with-python-win32-library/
 #https://pywinauto.readthedocs.io/en/latest/getting_started.html
+import psutil
 import pywinauto
 from pywinauto.application import Application
-from pywinauto.timings import wait_until
+from pywinauto import timings
 import pyautogui
 from pynput import mouse
+import pywinauto.keyboard
 
 #Packaging stuff:
 #https://realpython.com/pyinstaller-python/
@@ -72,7 +74,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal Screen","Index","PEG Custom","PEG Ion","Salt Rx","Wizard"]
-        token = 'YRhsy7jH10D2HK6cp1hduo432ufmxKtX'
+        token = 'zKoql0weEVXAQigMcE9Y43XrFiweV1yv'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -88,31 +90,59 @@ class CrystalDex_main:
                 filetypes=[("Executable files", "*.exe")]
             )
         if exe_path:
+            #First, kill any current SeBaView window, then proceed.
+            for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
+                try:
+                    if proc.info["name"] and "SeBaView" in proc.info["name"]:
+                        print(f"Killing SeBaView process: PID {proc.info['pid']}")
+                        proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            time.sleep(2)
+
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
-            app = Application(backend="uia").start(exe_path)
-            main_window = app.windows()[1]
-            main_window.set_focus()
+            SeBaView = Application(backend="uia").start(exe_path)
+            time.sleep(10)
+            for i, w in enumerate(SeBaView.windows()):
+                print(f'[{i}] Title: {w.window_text()}')
+            try:
+                # Try to wait for the first active window
+                SeBaView_main_window = SeBaView.window(title_re=".*SeBaView.*")
+                #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
+                wrapper = SeBaView_main_window.wrapper_object()
+                wrapper.set_focus()
+                print("SeBaView main window focused successfully.")
+            except Exception as e:
+                print("Failed to find or focus the SeBaView window.")
+                print(f"Error: {e}")
+
             """
             #This code is really buggy and needs to be moved to another section, but it's useful for figuring out the location of buttons in SeBaView.
-            main_window_rect = main_window.rectangle()
+            wrapper_rect = SeBaView_main_window.rectangle()
             try:
                 while True:
                     if mouse_is_down:
                         x, y = pyautogui.position()
-                        rel_x = x - main_window_rect.left
-                        rel_y = y - main_window_rect.top
+                        rel_x = x - wrapper_rect.left
+                        rel_y = y - wrapper_rect.top
                         print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
                     time.sleep(0.1)
             except KeyboardInterrupt:
                 pass
             """
+
             #Each of these needs to be nested inside some useful function that will be called when the user tries to take a picture.
-            main_window.click_input(coords=(36,59)) #This accesses the file button.
-            main_window.click_input(coords=(84, 224))  #This accesses the camera connecting button.
-            main_window.click_input(coords=(76, 236))  #This accesses the save button, which may be useless.
-            main_window.click_input(coords=(81, 202))  #This accesses the save as button.
-            #main_window.type_keys("filename.txt{ENTER}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
+            #wrapper.click_input(coords=(36,59)) #This accesses the file button. (Tested and confirmed)
+            for i in range(2):
+                wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
+            #wrapper.click_input(coords=(76, 236))  #This accesses the save button, which may be useless.
+            self.take_pictures(wrapper,'test_image')
+
+    def take_pictures(self,wrapper,image_title):
+        wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
+        time.sleep(3)
+        pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
 
     def add_menu(self):
         menu = Menu(self.root)
