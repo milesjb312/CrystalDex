@@ -83,20 +83,21 @@ class CrystalDex_main:
                 filetypes=[("Executable files", "*.exe")]
             )
         if exe_path:
-            #First, kill any current SeBaView window, then proceed.
-            for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
-                try:
-                    if proc.info["name"] and "SeBaView" in proc.info["name"]:
-                        print(f"Killing SeBaView process: PID {proc.info['pid']}")
-                        proc.kill()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            time.sleep(2)
-
+            """
+                #First, kill any current SeBaView window, then proceed.
+                for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
+                    try:
+                        if proc.info["name"] and "SeBaView" in proc.info["name"]:
+                            print(f"Killing SeBaView process: PID {proc.info['pid']}")
+                            proc.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                time.sleep(2)
+            """
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(10)
+            time.sleep(5)
             for i, w in enumerate(SeBaView.windows()):
                 print(f'[{i}] Title: {w.window_text()}')
             try:
@@ -230,8 +231,6 @@ class CrystalDex_main:
         with open("Crystal_Trays_Library.xlsx","wb") as c:
             c.write(file_download) #this writes (or overwrites) a file into the working computer with the download data from Box.
         print("Saving to:", os.path.abspath("Crystal_Trays_Library.xlsx"))
-        #df = pd.read_excel("download.xlsx")
-        #print(df)
         wb = load_workbook(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
         date = None
         crystal_screen = None
@@ -260,7 +259,9 @@ class CrystalDex_main:
         if indexable:
             ws_possible_duplicate_count = 0
             for ws in wb:
-                if all(term in ws.title for term in [date,crystal_screen,target_protein]):
+                tags_cell = str(ws['K1'].value or "")
+                tags = [tag.strip for tag in tags_cell.split(', ')]
+                if all(term and term in tags for term in [date,crystal_screen,target_protein]):
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
                 print(f'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray. \nPlease review the following to ensure no duplicate trays are indexed!')#change this to a Tkinter frame.
@@ -276,7 +277,7 @@ class CrystalDex_main:
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
                 all_tags = [date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values]
-                new_worksheet['K1'] = ','.join(map(str,all_tags))
+                new_worksheet['K1'] = ', '.join(map(str,all_tags))
                 new_worksheet['D1'] = str(date_set_var)
                 new_worksheet['D2'] = str(crystallization_chaperone_var)
                 new_worksheet['D3'] = str(crystal_screen_var)
@@ -286,15 +287,15 @@ class CrystalDex_main:
                 new_worksheet['H2'] = str(target_protein_top_right_stock_concentration_var)
                 new_worksheet['H3'] = str(target_protein_bottom_left_stock_concentration_var)
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
-                """
-                Re-enable these lines once ready to attach to Box.
+                
+                #The following command uploads the Crystal Trays Library to Box.
                 self.client.uploads.upload_file_version(
                     attributes=box_sdk_gen.UploadFileAttributesParentField(name="Crystal_Trays_Library.xlsx",
                         id="1862599427539"),
                     file_id="1862599427539",
                     file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
                 )
-                """
+                
             SeBaView_wrapper = self.load_SeBaView()
             self.identify_subwell(SeBaView_wrapper,str(date_set_var),str(crystal_screen_var),str(target_protein_var),str(target_protein_top_left_stock_concentration_var),str(target_protein_top_right_stock_concentration_var),str(target_protein_bottom_left_stock_concentration_var),str(crystallization_chaperone_var),str(custom_tags_values))
 
@@ -309,8 +310,12 @@ class CrystalDex_main:
 
         ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
-        date_set_values = ["01.01.2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
-        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00.00.0000):")
+        date_set_values = ["01-01-2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
+        today_label = ttk.Label(new_tray_frame,text="Today?")
+        today_label.grid(column=3,row=5,sticky=(N,W))
+        today_var = BooleanVar()
+        ttk.Checkbutton(new_tray_frame,variable=today_var).grid(column=4,row=5,sticky=(N,W))
+        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
         date_set_label.grid(column=1,row=5,sticky=(N,W))
         date_set_var = StringVar()
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
@@ -362,10 +367,15 @@ class CrystalDex_main:
         custom_tags_var = StringVar()
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
+        if today_var:
+            date_set_var = datetime.now()
+            date_set_var = date_set_var.strftime('%m-%d-%Y')
+        else:
+            date_set_var = date_set_var.get()
 
         ttk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
-                       date_set_var.get(),
+                       date_set_var,
                        crystal_screen_var.get(),
                        target_protein_var.get(),
                        target_protein_top_left_stock_concentration_var.get(),
