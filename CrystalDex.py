@@ -67,7 +67,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = 'BSMuw9I5ElwQ60CF7cMNmYxsRDGMyvqN'
+        token = 'fqXeR5RSvIImCtvKPwqZtc0dSs6RCmTW'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -169,11 +169,13 @@ class CrystalDex_main:
         precipitation_label.grid(column=1,row=7)
         precipitation_var = BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=precipitation_var).grid(column=2,row=7)
+        now = datetime.now()
+        date_snapped = now.strftime('%m-%d-%Y')
 
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
-                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var.get()}'
+                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var}_{date_snapped}'
                 )).grid(column=1,row=14,sticky=(N,W))
         
         for child in subwell_frame.winfo_children():
@@ -236,7 +238,7 @@ class CrystalDex_main:
         target_protein = None
 
         try:
-            date = datetime.strptime(date_set_var,"%m.%d.%Y")
+            date = datetime.strptime(date_set_var,"%m-%d-%Y")
             print(f'indexing! date: {date_set_var}')
             date = date.strftime('%m-%d-%Y')
             indexable = True
