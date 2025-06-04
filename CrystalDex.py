@@ -18,6 +18,7 @@ Functional goals of this program:
 #General imports
 import pandas as pd
 import os
+import shutil
 import json
 from openpyxl import Workbook, load_workbook
 from datetime import datetime
@@ -54,6 +55,11 @@ import pywinauto.keyboard
 script_dir = os.path.dirname(os.path.abspath(__file__))
 icon_path = os.path.join(script_dir,"crystaldex_icon.png")
 
+home = os.path.expanduser("~")
+downloads = os.path.join(home, "Downloads")
+crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
+#Fix this so it only moves .jpegs and move it to the right area.
+
 def on_click(x,y,button,pressed):
                 global mouse_is_down
                 mouse_is_down = pressed
@@ -73,12 +79,12 @@ class CrystalDex_main:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
-        self.crystal_screen_values = ["Crystal Screen","Index","PEG Custom","PEG Ion","Salt Rx","Wizard"]
-        token = 'zKoql0weEVXAQigMcE9Y43XrFiweV1yv'
+        self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
+        token = 'BSMuw9I5ElwQ60CF7cMNmYxsRDGMyvqN'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
-    def load_SeBaView_path(self):
+    def load_SeBaView(self):
         exe_path = None
         if os.path.exists("SeBaView_path_file.json"):
             with open("SeBaView_path_file.json", "r") as s:
@@ -110,8 +116,8 @@ class CrystalDex_main:
                 # Try to wait for the first active window
                 SeBaView_main_window = SeBaView.window(title_re=".*SeBaView.*")
                 #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
-                wrapper = SeBaView_main_window.wrapper_object()
-                wrapper.set_focus()
+                SeBaView_wrapper = SeBaView_main_window.wrapper_object()
+                SeBaView_wrapper.set_focus()
                 print("SeBaView main window focused successfully.")
             except Exception as e:
                 print("Failed to find or focus the SeBaView window.")
@@ -119,28 +125,90 @@ class CrystalDex_main:
 
             """
             #This code is really buggy and needs to be moved to another section, but it's useful for figuring out the location of buttons in SeBaView.
-            wrapper_rect = SeBaView_main_window.rectangle()
+            SeBaView_wrapper_rect = SeBaView_main_window.rectangle()
             try:
                 while True:
                     if mouse_is_down:
                         x, y = pyautogui.position()
-                        rel_x = x - wrapper_rect.left
-                        rel_y = y - wrapper_rect.top
+                        rel_x = x - SeBaView_wrapper_rect.left
+                        rel_y = y - SeBaView_wrapper_rect.top
                         print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
                     time.sleep(0.1)
             except KeyboardInterrupt:
                 pass
             """
-
-            #Each of these needs to be nested inside some useful function that will be called when the user tries to take a picture.
-            #wrapper.click_input(coords=(36,59)) #This accesses the file button. (Tested and confirmed)
             for i in range(2):
-                wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
-            #wrapper.click_input(coords=(76, 236))  #This accesses the save button, which may be useless.
-            self.take_picture(wrapper,'test_image')
+                SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
+            return SeBaView_wrapper
 
-    def take_picture(self,wrapper,image_title):
-        wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
+    def identify_subwell(self,SeBaView_wrapper,date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values):
+        self.clear_widgets()
+        self.add_menu()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.root.geometry(f"{screen_width // 3}x{screen_height}+0+0")
+        subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        subwell_frame.grid(column=0,row=0,sticky=(N,W))
+        self.root.columnconfigure(0,weight=1)
+        self.root.rowconfigure(0,weight=1)
+
+        well_column_label = ttk.Label(subwell_frame,text="Well column:")
+        well_column_label.grid(column=1,row=1)
+        well_column_values = ['A','B','C','D','E','F','G','H']
+        well_column_var = StringVar()
+        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
+        well_column_drop_down.grid(column=2,row=1)
+
+        well_row_label = ttk.Label(subwell_frame,text="Well row:")
+        well_row_label.grid(column=1,row=2)
+        well_row_values = [1,2,3,4,5,6,7,8,9,10,11,12]
+        well_row_var = IntVar()
+        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row_var,values=well_row_values)
+        well_row_drop_down.grid(column=2,row=2)
+
+        subwell_values = ['top_left','top_right','bottom_left']
+        subwell_label = ttk.Label(subwell_frame,text="subwell:")
+        subwell_label.grid(column=1,row=5,sticky=(N,W))
+        subwell_var = StringVar()
+        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
+        subwell_drop_down.grid(column=2,row=5)
+
+        possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
+        possible_salt_crystals_label.grid(column=1,row=6)
+        possible_salt_crystals_var = BooleanVar()
+        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var).grid(column=2,row=6)
+
+        precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
+        precipitation_label.grid(column=1,row=7)
+        precipitation_var = BooleanVar()
+        ttk.Checkbutton(subwell_frame,variable=precipitation_var).grid(column=2,row=7)
+
+        ttk.Button(subwell_frame,text="Take and Save Picture",
+                command=lambda: self.take_picture(
+                     SeBaView_wrapper,
+                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}'
+                )).grid(column=1,row=14,sticky=(N,W))
+        
+        for child in subwell_frame.winfo_children():
+            child.grid_configure(padx=15,pady=15)
+
+        self.root.deiconify()      # Restore the window if minimized
+        self.root.lift()
+        self.root.focus_force()
+
+        #Eventually I'll move this code
+        for filename in os.listdir(downloads):
+            file_path = os.path.join(downloads, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg')) and os.path.getmtime(file_path)<1:
+                try:
+                    shutil.move(file_path, crystal_pictures)
+                    print(f"Moved: {filename}")
+                except Exception as e:
+                    print(f"Failed to move {filename}: {e}")
+        
+    def take_picture(self,SeBaView_wrapper,image_title):
+        SeBaView_wrapper.set_focus() #Is this needed? Test later...
+        SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
 
@@ -150,13 +218,13 @@ class CrystalDex_main:
         menu.add_command(label="Help",command=self.Help)
         self.root.config(menu=menu)
 
-    def clear_frame(self):
+    def clear_widgets(self):
         for widget in self.root.winfo_children():
             if isinstance(widget,ttk.Frame):
                 widget.destroy()
 
     def Help(self):
-        self.clear_frame()
+        self.clear_widgets()
         self.add_menu()
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
@@ -238,10 +306,11 @@ class CrystalDex_main:
                     file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
                 )
                 """
-            self.load_SeBaView_path()
+            SeBaView_wrapper = self.load_SeBaView()
+            self.identify_subwell(SeBaView_wrapper,str(date_set_var),str(crystal_screen_var),str(target_protein_var),str(target_protein_top_left_stock_concentration_var),str(target_protein_top_right_stock_concentration_var),str(target_protein_bottom_left_stock_concentration_var),str(crystallization_chaperone_var),str(custom_tags_values))
 
     def New_Tray(self):
-        self.clear_frame()
+        self.clear_widgets()
         self.add_menu()
         self.root.geometry()
         new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
@@ -252,46 +321,46 @@ class CrystalDex_main:
         ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
         date_set_values = ["01.01.2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
-        date_set_tag = ttk.Label(new_tray_frame,text="Date Set (required; 00.00.0000):")
-        date_set_tag.grid(column=1,row=5,sticky=(N,W))
+        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00.00.0000):")
+        date_set_label.grid(column=1,row=5,sticky=(N,W))
         date_set_var = StringVar()
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
         date_set_drop_down.grid(column=2,row=5)
 
-        crystallization_chaperone_tag = ttk.Label(new_tray_frame,text="Crystallization Chaperone (optional):")
-        crystallization_chaperone_tag.grid(column=1,row=6,sticky=(N,W))
+        crystallization_chaperone_label = ttk.Label(new_tray_frame,text="Crystallization Chaperone (optional):")
+        crystallization_chaperone_label.grid(column=1,row=6,sticky=(N,W))
         crystallization_chaperone_var = StringVar()
         crystallization_chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystallization_chaperone_var,values=self.crystallization_chaperone_values)
         crystallization_chaperone_drop_down.grid(column=2,row=6)
 
-        crystal_screen_tag = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
-        crystal_screen_tag.grid(column=1,row=7,sticky=(N,W))
+        crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
+        crystal_screen_label.grid(column=1,row=7,sticky=(N,W))
         crystal_screen_var = StringVar()
         crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=self.crystal_screen_values)
         crystal_screen_drop_down.grid(column=2,row=7)
 
         target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
-        target_protein_tag = ttk.Label(new_tray_frame,text="Target Protein (required):")
-        target_protein_tag.grid(column=1,row=8,sticky=(N,W))
+        target_protein_label = ttk.Label(new_tray_frame,text="Target Protein (required):")
+        target_protein_label.grid(column=1,row=8,sticky=(N,W))
         target_protein_var = StringVar()
         target_protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_var,values=target_protein_values)
         target_protein_drop_down.grid(column=2,row=8,sticky=(N,W))
 
         target_protein_stock_concentration_values = [1,5,15,20]
-        target_protein_top_left_stock_concentration_tag = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
-        target_protein_top_left_stock_concentration_tag.grid(column=1,row=9,sticky=(N,W))
+        target_protein_top_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
+        target_protein_top_left_stock_concentration_label.grid(column=1,row=9,sticky=(N,W))
         target_protein_top_left_stock_concentration_var = DoubleVar()
         target_protein_top_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_left_stock_concentration_var,values=target_protein_stock_concentration_values)
         target_protein_top_left_stock_concentration_drop_down.grid(column=2,row=9,sticky=(N,W))
 
-        target_protein_top_right_stock_concentration_tag = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top right subwell (required):")
-        target_protein_top_right_stock_concentration_tag.grid(column=1,row=10,sticky=(N,W))
+        target_protein_top_right_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top right subwell (required):")
+        target_protein_top_right_stock_concentration_label.grid(column=1,row=10,sticky=(N,W))
         target_protein_top_right_stock_concentration_var = DoubleVar()
         target_protein_top_right_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_right_stock_concentration_var,values=target_protein_stock_concentration_values)
         target_protein_top_right_stock_concentration_drop_down.grid(column=2,row=10,sticky=(N,W))
 
-        target_protein_bottom_left_stock_concentration_tag = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into bottom left subwell (required):")
-        target_protein_bottom_left_stock_concentration_tag.grid(column=1,row=11,sticky=(N,W))
+        target_protein_bottom_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into bottom left subwell (required):")
+        target_protein_bottom_left_stock_concentration_label.grid(column=1,row=11,sticky=(N,W))
         target_protein_bottom_left_stock_concentration_var = DoubleVar()
         target_protein_bottom_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_bottom_left_stock_concentration_var,values=target_protein_stock_concentration_values)
         target_protein_bottom_left_stock_concentration_drop_down.grid(column=2,row=11,sticky=(N,W))
@@ -299,8 +368,8 @@ class CrystalDex_main:
         #Later, if I have time, I'll want to add a little virtual replica in column 3 of a single well (with the four subwells) so that the user can see exactly what they're filling out, and each subwell will have the concentration appear as they fill it in.
 
         custom_tags_values = []
-        custom_tags = ttk.Label(new_tray_frame,text="Custom Tags (optional; separated by commas, please!):")
-        custom_tags.grid(column=1,row=12,sticky=(N,W))
+        custom_tags_label = ttk.Label(new_tray_frame,text="Custom Tags (optional; separated by commas, please!):")
+        custom_tags_label.grid(column=1,row=12,sticky=(N,W))
         custom_tags_var = StringVar()
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
@@ -322,17 +391,17 @@ class CrystalDex_main:
             child.grid_configure(padx=5,pady=5)
 
     def Open_Tray(self):
-        self.clear_frame()
+        self.clear_widgets()
         self.add_menu()
         open_tray_frame = ttk.Frame(self.root, padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
 
     def Upload_Xtal_Screen(self):
-        self.clear_frame()
+        self.clear_widgets()
         self.add_menu()
         upload_xtal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
 
     def startup(self):
-        self.clear_frame()
+        self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
         startup.option_add('*tearOFF',FALSE)
