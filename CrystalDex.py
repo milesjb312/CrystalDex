@@ -1,17 +1,4 @@
-"""
-Functional goals of this program:
-    1) To make it easy to put both pictures and descriptions of every crystal we find immediately into Box without having to open up Box and navigate through a complex Excel sheet
-    that noramlly requires very repetitive data entry (and in which we often miss things).
-        - This will be accomplished by using the Box SDK with Python to access Box and by creating a Tkinter GUI that is easy to interact with. The GUI will contain reference fields to 
-        be filled out and buttons for operating the microscope in an integrated fashion. It may also contain other operations as described in Goal 2.
-    2) To incorporate the information from all the previous experimental steps into a single place so that we can track easily (and with less tedium) how our experiments are going.
-        - This will be accomplished by creating a background database that includes all of the crystal conditions that we normally use, as well as GUI-led steps for uploading crystal
-        optimization conditions (which are often difficult to keep track of on paper). If possible and deemed necessary, this GUI may lead the user to operate a web-sourced crystal 
-        optimization condition generator (https://hamptonresearch.com/make-tray.php) and then will immediately scrape the data into the database to be referenced later on in the 
-        Excel-sheet editing steps.
-        https://docs.python.org/3/library/tkinter.html
-"""
-
+#See the README for the functional goals of this program and for author notes and acknowledgements.
 #https://byu.app.box.com/developers/console
 
 #Imports
@@ -186,7 +173,7 @@ class CrystalDex_main:
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
-                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}'
+                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var.get()}'
                 )).grid(column=1,row=14,sticky=(N,W))
         
         for child in subwell_frame.winfo_children():
@@ -408,9 +395,9 @@ class CrystalDex_main:
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a button placed inside it.
         #https://tkdocs.com/tutorial/text.html#basics
-        new_tray_button = ttk.Button(startup,text="Index New Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        open_tray_button = ttk.Button(startup,text="Open Tray",command=self.Open_Tray,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        upload_crystallization_screen_button = ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Xtal_Screen,width=40).grid(column=2,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Index New Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Open Tray",command=self.Open_Tray,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Xtal_Screen,width=40).grid(column=2,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         self.root.mainloop()
 
 if __name__ == "__main__":
