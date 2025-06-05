@@ -67,7 +67,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = 'fqXeR5RSvIImCtvKPwqZtc0dSs6RCmTW'
+        token = '76vxs92dsnLTYU28AQAR6mikQslwLhIC'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 

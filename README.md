@@ -12,3 +12,17 @@ Functional goals of this program:
         optimization condition generator (https://hamptonresearch.com/make-tray.php) and then will immediately scrape the data into the database to be referenced later on in the 
         Excel-sheet editing steps.
         https://docs.python.org/3/library/tkinter.html
+
+Currently, CrystalDex does the following:
+    1) Indexes Trays by:
+        - Requesting information about the protein construct, crystallization screen, and date, and creating a new Excel worksheet within a workbook that contains all virtual crystal trays previously indexed.
+        - Automatically opening the SeBaView software to allow the user to see the camera image.
+        - Requesting information about the well and sub well currently focused.
+        - Automatically saving the image with a conserved naming system.
+        - Updating the entire workbook into Box.
+
+In the near future, CrystalDex will:
+    1) Improve indexing trays by:
+        - Allowing users to click-and-drag a sizing tool to measure crystals in a repeatable and consistent manner.
+        - Uploading each picture taken directly into Box
+        - Creating and posting a link from Box to each picture inside of the appropriate Excel virtual tray.
