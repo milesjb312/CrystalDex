@@ -61,16 +61,16 @@ class CrystalDex_main:
         self.root.title("CrystalDex")
         icon = PhotoImage(file=icon_path)
         self.root.iconphoto(True,icon)
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        self.root.minsize(screen_width//5,600)
-        self.root.geometry(f'1050x700+{screen_width//2-525}+{screen_height//2-350}')
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+        self.root.minsize(self.screen_width//5,600)
+        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = '2L4Pl0QkTwtreUqhR2TBzs0CI4IIieSy'
+        token = 'YgQg5efeelMmXm99H1Bnpdn26npqASyl'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -229,8 +229,13 @@ class CrystalDex_main:
 
     def Index_Tray(self,date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values):
         indexable = False
-        file_id = '1861370891462'
-        file_download = self.client.downloads.download_file(file_id).read()
+        file_download = None
+        try:
+            file_id = '1862599427539'
+            file_download = self.client.downloads.download_file(file_id).read()    
+        except FileNotFoundError:
+            file_id = '1861370891462'
+            file_download = self.client.downloads.download_file(file_id).read()
         with open("Crystal_Trays_Library.xlsx","wb") as c:
             c.write(file_download) #this writes (or overwrites) a file into the working computer with the download data from Box.
         print("Saving to:", os.path.abspath("Crystal_Trays_Library.xlsx"))
@@ -245,7 +250,7 @@ class CrystalDex_main:
             date = date.strftime('%m-%d-%Y')
             indexable = True
         except ValueError:
-            messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01.01.2025")
+            messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
         if crystal_screen_var in self.crystal_screen_values:
             crystal_screen = crystal_screen_var
             indexable = True
@@ -281,7 +286,7 @@ class CrystalDex_main:
                 new_worksheet.title = short_title
                 all_tags = [date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values]
                 new_worksheet['K1'] = ', '.join(map(str,all_tags))
-                new_worksheet['D1'] = str(date_set_var)
+                new_worksheet['D1'] = date_set_var
                 new_worksheet['D2'] = str(crystallization_chaperone_var)
                 new_worksheet['D3'] = str(crystal_screen_var)
                 new_worksheet['D4'] = str(target_protein_var)
@@ -406,6 +411,7 @@ class CrystalDex_main:
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
+        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
         startup.option_add('*tearOFF',FALSE)
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a button placed inside it.
