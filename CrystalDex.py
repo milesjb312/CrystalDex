@@ -61,13 +61,16 @@ class CrystalDex_main:
         self.root.title("CrystalDex")
         icon = PhotoImage(file=icon_path)
         self.root.iconphoto(True,icon)
-        self.root.minsize(700,600)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.root.minsize(screen_width//5,600)
+        self.root.geometry(f'1050x700+{screen_width//2-525}+{screen_height//2-350}')
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = '76vxs92dsnLTYU28AQAR6mikQslwLhIC'
+        token = '2L4Pl0QkTwtreUqhR2TBzs0CI4IIieSy'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -134,7 +137,7 @@ class CrystalDex_main:
         self.add_menu()
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        self.root.geometry(f"{screen_width // 3}x{screen_height}+0+0")
+        self.root.geometry(f"{screen_width // 4}x{screen_height}+0+0")
         subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
         subwell_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
@@ -313,7 +316,7 @@ class CrystalDex_main:
         date_set_values = ["01-01-2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
         today_label = ttk.Label(new_tray_frame,text="Today?")
         today_label.grid(column=3,row=5,sticky=(N,W))
-        today_var = BooleanVar()
+        today_var = False
         ttk.Checkbutton(new_tray_frame,variable=today_var).grid(column=4,row=5,sticky=(N,W))
         date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
         date_set_label.grid(column=1,row=5,sticky=(N,W))
