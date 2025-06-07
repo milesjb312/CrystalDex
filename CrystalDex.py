@@ -61,13 +61,16 @@ class CrystalDex_main:
         self.root.title("CrystalDex")
         icon = PhotoImage(file=icon_path)
         self.root.iconphoto(True,icon)
-        self.root.minsize(700,600)
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+        self.root.minsize(self.screen_width//5,600)
+        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = 'BSMuw9I5ElwQ60CF7cMNmYxsRDGMyvqN'
+        token = 'YgQg5efeelMmXm99H1Bnpdn26npqASyl'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -83,20 +86,21 @@ class CrystalDex_main:
                 filetypes=[("Executable files", "*.exe")]
             )
         if exe_path:
-            #First, kill any current SeBaView window, then proceed.
-            for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
-                try:
-                    if proc.info["name"] and "SeBaView" in proc.info["name"]:
-                        print(f"Killing SeBaView process: PID {proc.info['pid']}")
-                        proc.kill()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            time.sleep(2)
-
+            """
+                #First, kill any current SeBaView window, then proceed.
+                for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
+                    try:
+                        if proc.info["name"] and "SeBaView" in proc.info["name"]:
+                            print(f"Killing SeBaView process: PID {proc.info['pid']}")
+                            proc.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                time.sleep(2)
+            """
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(10)
+            time.sleep(5)
             for i, w in enumerate(SeBaView.windows()):
                 print(f'[{i}] Title: {w.window_text()}')
             try:
@@ -133,7 +137,7 @@ class CrystalDex_main:
         self.add_menu()
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        self.root.geometry(f"{screen_width // 3}x{screen_height}+0+0")
+        self.root.geometry(f"{screen_width // 4}x{screen_height}+0+0")
         subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
         subwell_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
@@ -169,11 +173,13 @@ class CrystalDex_main:
         precipitation_label.grid(column=1,row=7)
         precipitation_var = BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=precipitation_var).grid(column=2,row=7)
+        now = datetime.now()
+        date_snapped = now.strftime('%m-%d-%Y')
 
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
-                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var.get()}'
+                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var}_{date_snapped}'
                 )).grid(column=1,row=14,sticky=(N,W))
         
         for child in subwell_frame.winfo_children():
@@ -223,25 +229,28 @@ class CrystalDex_main:
 
     def Index_Tray(self,date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values):
         indexable = False
-        file_id = '1861370891462'
-        file_download = self.client.downloads.download_file(file_id).read()
+        file_download = None
+        try:
+            file_id = '1862599427539'
+            file_download = self.client.downloads.download_file(file_id).read()    
+        except FileNotFoundError:
+            file_id = '1861370891462'
+            file_download = self.client.downloads.download_file(file_id).read()
         with open("Crystal_Trays_Library.xlsx","wb") as c:
             c.write(file_download) #this writes (or overwrites) a file into the working computer with the download data from Box.
         print("Saving to:", os.path.abspath("Crystal_Trays_Library.xlsx"))
-        #df = pd.read_excel("download.xlsx")
-        #print(df)
         wb = load_workbook(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
         date = None
         crystal_screen = None
         target_protein = None
 
         try:
-            date = datetime.strptime(date_set_var,"%m.%d.%Y")
+            date = datetime.strptime(date_set_var,"%m-%d-%Y")
             print(f'indexing! date: {date_set_var}')
             date = date.strftime('%m-%d-%Y')
             indexable = True
         except ValueError:
-            messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01.01.2025")
+            messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
         if crystal_screen_var in self.crystal_screen_values:
             crystal_screen = crystal_screen_var
             indexable = True
@@ -258,7 +267,9 @@ class CrystalDex_main:
         if indexable:
             ws_possible_duplicate_count = 0
             for ws in wb:
-                if all(term in ws.title for term in [date,crystal_screen,target_protein]):
+                tags_cell = str(ws['K1'].value or "")
+                tags = [tag.strip for tag in tags_cell.split(', ')]
+                if all(term and term in tags for term in [date,crystal_screen,target_protein]):
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
                 print(f'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray. \nPlease review the following to ensure no duplicate trays are indexed!')#change this to a Tkinter frame.
@@ -274,8 +285,8 @@ class CrystalDex_main:
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
                 all_tags = [date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values]
-                new_worksheet['K1'] = ','.join(map(str,all_tags))
-                new_worksheet['D1'] = str(date_set_var)
+                new_worksheet['K1'] = ', '.join(map(str,all_tags))
+                new_worksheet['D1'] = date_set_var
                 new_worksheet['D2'] = str(crystallization_chaperone_var)
                 new_worksheet['D3'] = str(crystal_screen_var)
                 new_worksheet['D4'] = str(target_protein_var)
@@ -284,15 +295,15 @@ class CrystalDex_main:
                 new_worksheet['H2'] = str(target_protein_top_right_stock_concentration_var)
                 new_worksheet['H3'] = str(target_protein_bottom_left_stock_concentration_var)
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
-                """
-                Re-enable these lines once ready to attach to Box.
+                
+                #The following command uploads the Crystal Trays Library to Box.
                 self.client.uploads.upload_file_version(
                     attributes=box_sdk_gen.UploadFileAttributesParentField(name="Crystal_Trays_Library.xlsx",
                         id="1862599427539"),
                     file_id="1862599427539",
                     file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb")
                 )
-                """
+                
             SeBaView_wrapper = self.load_SeBaView()
             self.identify_subwell(SeBaView_wrapper,str(date_set_var),str(crystal_screen_var),str(target_protein_var),str(target_protein_top_left_stock_concentration_var),str(target_protein_top_right_stock_concentration_var),str(target_protein_bottom_left_stock_concentration_var),str(crystallization_chaperone_var),str(custom_tags_values))
 
@@ -307,8 +318,12 @@ class CrystalDex_main:
 
         ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
-        date_set_values = ["01.01.2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
-        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00.00.0000):")
+        date_set_values = ["01-01-2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
+        today_label = ttk.Label(new_tray_frame,text="Today?")
+        today_label.grid(column=3,row=5,sticky=(N,W))
+        today_var = False
+        ttk.Checkbutton(new_tray_frame,variable=today_var).grid(column=4,row=5,sticky=(N,W))
+        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
         date_set_label.grid(column=1,row=5,sticky=(N,W))
         date_set_var = StringVar()
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
@@ -360,10 +375,15 @@ class CrystalDex_main:
         custom_tags_var = StringVar()
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
+        if today_var:
+            date_set_var = datetime.now()
+            date_set_var = date_set_var.strftime('%m-%d-%Y')
+        else:
+            date_set_var = date_set_var.get()
 
         ttk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
-                       date_set_var.get(),
+                       date_set_var,
                        crystal_screen_var.get(),
                        target_protein_var.get(),
                        target_protein_top_left_stock_concentration_var.get(),
@@ -391,6 +411,7 @@ class CrystalDex_main:
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
+        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
         startup.option_add('*tearOFF',FALSE)
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a button placed inside it.
