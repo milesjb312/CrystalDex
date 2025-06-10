@@ -143,36 +143,50 @@ class CrystalDex_main:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
 
+        ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully magnified before taking any pictures.")
+        ensure_magnified_label.grid(column=1,row=1)
+
         well_column_label = ttk.Label(subwell_frame,text="Well column:")
-        well_column_label.grid(column=1,row=1)
+        well_column_label.grid(column=1,row=2)
         well_column_values = ['A','B','C','D','E','F','G','H']
         well_column_var = StringVar()
         well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
-        well_column_drop_down.grid(column=2,row=1)
+        well_column_drop_down.grid(column=2,row=2)
 
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
-        well_row_label.grid(column=1,row=2)
+        well_row_label.grid(column=1,row=3)
         well_row_values = [1,2,3,4,5,6,7,8,9,10,11,12]
         well_row_var = IntVar()
         well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row_var,values=well_row_values)
-        well_row_drop_down.grid(column=2,row=2)
+        well_row_drop_down.grid(column=2,row=3)
 
         subwell_values = ['top_left','top_right','bottom_left']
         subwell_label = ttk.Label(subwell_frame,text="subwell:")
-        subwell_label.grid(column=1,row=5,sticky=(N,W))
+        subwell_label.grid(column=1,row=4,sticky=(N,W))
         subwell_var = StringVar()
         subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
-        subwell_drop_down.grid(column=2,row=5)
+        subwell_drop_down.grid(column=2,row=4)
 
         possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
-        possible_salt_crystals_label.grid(column=1,row=6)
+        possible_salt_crystals_label.grid(column=1,row=5)
         possible_salt_crystals_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var).grid(column=2,row=6)
+        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var,onvalue=True,offvalue=False).grid(column=2,row=5)
 
         precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
-        precipitation_label.grid(column=1,row=7)
+        precipitation_label.grid(column=1,row=6)
         precipitation_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=precipitation_var).grid(column=2,row=7)
+        ttk.Checkbutton(subwell_frame,variable=precipitation_var,onvalue=True,offvalue=False).grid(column=2,row=6)
+
+        microcrystals_label = ttk.Label(subwell_frame,text="Microcrystals present")
+        microcrystals_label.grid(column=1,row=7)
+        microcrystals_var = BooleanVar()
+        ttk.Checkbutton(subwell_frame,variable=microcrystals_var,onvalue=True,offvalue=False).grid(column=2,row=7)
+
+        glassy_protein_or_artifacts_label = ttk.Label(subwell_frame,text="Glassy protein or artifacts present")
+        glassy_protein_or_artifacts_label.grid(column=1,row=8)
+        glassy_protein_or_artifacts_var = BooleanVar()
+        ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=8)
+
         now = datetime.now()
         date_snapped = now.strftime('%m-%d-%Y')
 
@@ -321,8 +335,8 @@ class CrystalDex_main:
         date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
         today_label = ttk.Label(new_tray_frame,text="Today?")
         today_label.grid(column=3,row=5,sticky=(N,W))
-        today_var = False
-        ttk.Checkbutton(new_tray_frame,variable=today_var).grid(column=4,row=5,sticky=(N,W))
+        today_var = BooleanVar()
+        ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False).grid(column=4,row=5,sticky=(N,W))
         date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
         date_set_label.grid(column=1,row=5,sticky=(N,W))
         date_set_var = StringVar()
@@ -377,6 +391,7 @@ class CrystalDex_main:
         custom_tags_drop_down.grid(column=2,row=12)
         if today_var:
             date_set_var.set(datetime.now().strftime('%m-%d-%Y'))
+            print(f'date_set_var.get() = {date_set_var.get()}')
 
         ttk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
