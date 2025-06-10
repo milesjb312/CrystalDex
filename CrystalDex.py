@@ -70,7 +70,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = 'YgQg5efeelMmXm99H1Bnpdn26npqASyl'
+        token = '6CHwB0IxA5v2Y2SVY0cFHJ9Q8I4v2gLv'
         auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
         self.client: BoxClient = BoxClient(auth=auth)
 
@@ -247,10 +247,10 @@ class CrystalDex_main:
         try:
             date = datetime.strptime(date_set_var,"%m-%d-%Y")
             print(f'indexing! date: {date_set_var}')
-            date = date.strftime('%m-%d-%Y')
             indexable = True
         except ValueError:
             messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
+            print(f'not indexing. date: {date_set_var}')
         if crystal_screen_var in self.crystal_screen_values:
             crystal_screen = crystal_screen_var
             indexable = True
@@ -287,13 +287,13 @@ class CrystalDex_main:
                 all_tags = [date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values]
                 new_worksheet['K1'] = ', '.join(map(str,all_tags))
                 new_worksheet['D1'] = date_set_var
-                new_worksheet['D2'] = str(crystallization_chaperone_var)
-                new_worksheet['D3'] = str(crystal_screen_var)
-                new_worksheet['D4'] = str(target_protein_var)
-                new_worksheet['D5'] = str(custom_tags_values)
-                new_worksheet['H1'] = str(target_protein_top_left_stock_concentration_var)
-                new_worksheet['H2'] = str(target_protein_top_right_stock_concentration_var)
-                new_worksheet['H3'] = str(target_protein_bottom_left_stock_concentration_var)
+                new_worksheet['D2'] = crystallization_chaperone_var
+                new_worksheet['D3'] = crystal_screen_var
+                new_worksheet['D4'] = target_protein_var
+                new_worksheet['D5'] = custom_tags_values
+                new_worksheet['H1'] = target_protein_top_left_stock_concentration_var
+                new_worksheet['H2'] = target_protein_top_right_stock_concentration_var
+                new_worksheet['H3'] = target_protein_bottom_left_stock_concentration_var
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
                 
                 #The following command uploads the Crystal Trays Library to Box.
@@ -305,7 +305,7 @@ class CrystalDex_main:
                 )
                 
             SeBaView_wrapper = self.load_SeBaView()
-            self.identify_subwell(SeBaView_wrapper,str(date_set_var),str(crystal_screen_var),str(target_protein_var),str(target_protein_top_left_stock_concentration_var),str(target_protein_top_right_stock_concentration_var),str(target_protein_bottom_left_stock_concentration_var),str(crystallization_chaperone_var),str(custom_tags_values))
+            self.identify_subwell(SeBaView_wrapper,date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values)
 
     def New_Tray(self):
         self.clear_widgets()
@@ -318,7 +318,7 @@ class CrystalDex_main:
 
         ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
-        date_set_values = ["01-01-2025"] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
+        date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
         today_label = ttk.Label(new_tray_frame,text="Today?")
         today_label.grid(column=3,row=5,sticky=(N,W))
         today_var = False
@@ -376,21 +376,18 @@ class CrystalDex_main:
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
         if today_var:
-            date_set_var = datetime.now()
-            date_set_var = date_set_var.strftime('%m-%d-%Y')
-        else:
-            date_set_var = date_set_var.get()
+            date_set_var.set(datetime.now().strftime('%m-%d-%Y'))
 
         ttk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
-                       date_set_var,
-                       crystal_screen_var.get(),
-                       target_protein_var.get(),
-                       target_protein_top_left_stock_concentration_var.get(),
-                       target_protein_top_right_stock_concentration_var.get(),
-                       target_protein_bottom_left_stock_concentration_var.get(),
-                       crystallization_chaperone_var.get(),
-                       custom_tags_var.get()
+                       str(date_set_var.get()),
+                       str(crystal_screen_var.get()),
+                       str(target_protein_var.get()),
+                       str(target_protein_top_left_stock_concentration_var.get()),
+                       str(target_protein_top_right_stock_concentration_var.get()),
+                       str(target_protein_bottom_left_stock_concentration_var.get()),
+                       str(crystallization_chaperone_var.get()),
+                       str(custom_tags_var.get())
                         )
                     ).grid(column=1,row=13,sticky=(N,W))
 
