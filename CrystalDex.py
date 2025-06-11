@@ -179,6 +179,9 @@ class CrystalDex_main:
         subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
         subwell_drop_down.grid(column=2,row=4)
 
+        number_of_crystals_label = None
+        number_of_crystals_var = None
+
         possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
         possible_salt_crystals_label.grid(column=1,row=5)
         possible_salt_crystals_var = BooleanVar()
@@ -201,11 +204,12 @@ class CrystalDex_main:
 
         now = datetime.now()
         date_snapped = now.strftime('%m-%d-%Y')
+        image_title = f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var}_{date_snapped}' 
 
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
-                     f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var}_{date_snapped}',
+                     image_title,
                      ws
                 )).grid(column=1,row=14,sticky=(N,W))
         
@@ -216,7 +220,14 @@ class CrystalDex_main:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
-        
+
+        #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
+        well_to_excel_dict = {'A':8,'B':19,'C':30,'D':41,'E':52,'F':63,'G':74,'H':85,1:'C',2:'H',3:'M',4:'R',5:'W',6:'AB',7:'AG',8:'AL',9:'AQ',10:'AV',11:'BA',12:'BF'}
+        picture_link_cell = ws[f'{well_to_excel_dict[f'{well_column_var.get()}']}{well_to_excel_dict[f'{well_row_var.get()}']}']
+        picture_link_cell.value(f'{image_title}')
+        #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
+        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')#This is how to fill other cells as a reference of the picture_link_cell
+
     def take_picture(self,SeBaView_wrapper,image_title,ws):
         SeBaView_wrapper.set_focus() #Is this needed? Test later...
         SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
@@ -369,7 +380,6 @@ class CrystalDex_main:
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
                 SeBaView_wrapper = self.load_SeBaView()
                 self.identify_subwell(new_worksheet,SeBaView_wrapper,date_set_var,crystal_screen_var,target_protein_var,target_protein_top_left_stock_concentration_var,target_protein_top_right_stock_concentration_var,target_protein_bottom_left_stock_concentration_var,crystallization_chaperone_var,custom_tags_values)
-
 
     def New_Tray(self):
         self.clear_widgets()
