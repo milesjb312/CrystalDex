@@ -22,7 +22,8 @@ from tkinter import filedialog
 #Box integration imports:
 #https://github.com/box/box-python-sdk-gen/tree/main
 import box_sdk_gen
-from box_sdk_gen import BoxClient, BoxDeveloperTokenAuth
+from box_sdk_gen import BoxClient, BoxOAuth, OAuthConfig, FileTokenStorage, BoxSDKError
+import webbrowser
 
 #SebaView integration imports:
 #https://codezup.com/automate-windows-tasks-with-python-win32-library/
@@ -70,9 +71,32 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        token = 'rSiKvENhVt1CGdzsPp7oo8lUskXBLhUK'
-        auth: BoxDeveloperTokenAuth = BoxDeveloperTokenAuth(token=token)
-        self.client: BoxClient = BoxClient(auth=auth)
+
+        # Step 1: Replace with your real ID/secret
+        CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
+        CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
+
+        token_storage = FileTokenStorage(filename='box_token.json')
+
+        # Step 2: Set up OAuth config (use localhost as redirect URI)
+        config = OAuthConfig(
+            client_id=CLIENT_ID,
+            client_secret=CLIENT_SECRET,
+            token_storage=token_storage
+        )
+
+        # Step 3: Get the authorization URL
+        auth = BoxOAuth(config)
+        try:
+            auth.retrieve_token()
+            print(f'User already approved app for Box.')
+        except BoxSDKError:
+            auth_url = auth.get_authorize_url()
+            webbrowser.open(auth_url)
+            authorization_code = input("Paste the code you got after approving: ")
+            auth.get_tokens_authorization_code_grant(authorization_code)
+
+        self.client = BoxClient(auth=auth)
 
     def Box_Save(self):
         #The following command uploads the Crystal Trays Library to Box.
@@ -204,13 +228,15 @@ class CrystalDex_main:
 
         now = datetime.now()
         date_snapped = now.strftime('%m-%d-%Y')
-        image_title = f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{well_column_var.get()}{well_row_var.get()}_{subwell_var.get()}_{date_set_var}_{date_snapped}' 
+        image_title = f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{str(well_column_var.get())}{str(well_row_var.get())}_{subwell_var.get()}_{date_set_var}_{date_snapped}' 
 
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
-                     image_title,
-                     ws
+                     str(image_title),
+                     ws,
+                     well_column_var,
+                     well_row_var
                 )).grid(column=1,row=14,sticky=(N,W))
         
         for child in subwell_frame.winfo_children():
@@ -221,14 +247,8 @@ class CrystalDex_main:
         self.root.lift()
         self.root.focus_force()
 
-        #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
-        well_to_excel_dict = {'A':8,'B':19,'C':30,'D':41,'E':52,'F':63,'G':74,'H':85,1:'C',2:'H',3:'M',4:'R',5:'W',6:'AB',7:'AG',8:'AL',9:'AQ',10:'AV',11:'BA',12:'BF'}
-        picture_link_cell = ws[f'{well_to_excel_dict[f'{well_column_var.get()}']}{well_to_excel_dict[f'{well_row_var.get()}']}']
-        picture_link_cell.value(f'{image_title}')
-        #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
-        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')#This is how to fill other cells as a reference of the picture_link_cell
-
-    def take_picture(self,SeBaView_wrapper,image_title,ws):
+    def take_picture(self,SeBaView_wrapper,image_title,ws,well_column_var,well_row_var):
+        print(f'image_title: {image_title}')
         SeBaView_wrapper.set_focus() #Is this needed? Test later...
         SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
@@ -241,6 +261,12 @@ class CrystalDex_main:
                     print(f"Moved: {filename}")
                 except Exception as e:
                     print(f"Failed to move {filename}: {e}")
+        #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
+        well_to_excel_dict = {'A':8,'B':19,'C':30,'D':41,'E':52,'F':63,'G':74,'H':85,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
+        picture_link_cell = ws[f'{well_to_excel_dict[f'{str(well_row_var.get())}']}{well_to_excel_dict[f'{str(well_column_var.get())}']}']
+        picture_link_cell.value(f'{image_title}')
+        #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
+        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')#This is how to fill other cells as a reference of the picture_link_cell
         self.Box_Save()
 
     def add_menu(self):
