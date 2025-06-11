@@ -230,6 +230,7 @@ class CrystalDex_main:
         date_snapped = now.strftime('%m-%d-%Y')
         image_title = f'{crystallization_chaperone_var}_{target_protein_var}_{crystal_screen_var}_{str(well_column_var.get())}{str(well_row_var.get())}_{subwell_var.get()}_{date_set_var}_{date_snapped}' 
 
+        #This function is having image_title issues...
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
                      SeBaView_wrapper,
