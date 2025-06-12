@@ -57,6 +57,11 @@ listener.start()
 
 class CrystalDex_main:
     def __init__(self):
+        #Frequently accessed values (will be turned into a .json soon):
+        self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+        self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
+
+        #Tkinter initializations
         root=Tk()
         self.root = root
         self.root.title("CrystalDex")
@@ -69,23 +74,16 @@ class CrystalDex_main:
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
-        self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
-        self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
 
-        # Step 1: Replace with your real ID/secret
+        #Box integrations:
         CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
         CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
-
         token_storage = FileTokenStorage(filename='box_token.json')
-
-        # Step 2: Set up OAuth config (use localhost as redirect URI)
         config = OAuthConfig(
             client_id=CLIENT_ID,
             client_secret=CLIENT_SECRET,
             token_storage=token_storage
         )
-
-        # Step 3: Get the authorization URL
         auth = BoxOAuth(config)
         try:
             auth.retrieve_token()
@@ -95,7 +93,6 @@ class CrystalDex_main:
             webbrowser.open(auth_url)
             authorization_code = input("Paste the code you got after approving: ")
             auth.get_tokens_authorization_code_grant(authorization_code)
-
         self.client = BoxClient(auth=auth)
 
     def Box_Save(self):
