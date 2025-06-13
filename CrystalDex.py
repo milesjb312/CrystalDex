@@ -78,7 +78,7 @@ class CrystalDex_main:
             auth.get_tokens_authorization_code_grant(authorization_code)
         self.client = BoxClient(auth=auth)
 
-        #Access Crystal_Trays_Library or the Mastercopy:
+        #Access CrystalDex_Library or the Mastercopy:
         file_download = None
         try:
             file_id = '1892938696722'
@@ -87,11 +87,11 @@ class CrystalDex_main:
             file_id = '1861370891462'
             file_download = self.client.downloads.download_file(file_id).read()
 
-        #Begin writing a new Crystal_Trays_Library.xlsx file on the working computer:
-        with open("Crystal_Trays_Library.xlsx","wb") as c:
+        #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
+        with open("CrystalDex_Library.xlsx","wb") as c:
             c.write(file_download)
-        print("Saving to:", os.path.abspath("Crystal_Trays_Library.xlsx"))
-        self.wb = load_workbook(filename=os.path.abspath("Crystal_Trays_Library.xlsx")) #Accesses the excel workbook using the openpyxl python module
+        print("Saving to:", os.path.abspath("CrystalDex_Library.xlsx"))
+        self.wb = load_workbook(filename=os.path.abspath("CrystalDex_Library.xlsx")) #Accesses the excel workbook using the openpyxl python module
         
         #Other frequently accessed values (will be turned into a .json soon):
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
@@ -124,10 +124,10 @@ class CrystalDex_main:
         #The following command uploads the Crystal Trays Library and the images to Box.
         self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
-                name="Crystal_Trays_Library.xlsx",
+                name="CrystalDex_Library.xlsx",
                 id="320928486478"),
                 file_id="1892938696722",
-                file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb"
+                file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
                 )
             )
         for new_path in range(len(self.picture_upload_paths)):
@@ -143,6 +143,7 @@ class CrystalDex_main:
                 self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
                 shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
                 print(f'shared_link: {shared_link_url}')
+            self.startup()
     
     def load_SeBaView(self):
         exe_path = None
@@ -329,7 +330,7 @@ class CrystalDex_main:
         for child in new_tray_frame.winfo_children():
             child.grid_configure(padx=5,pady=5)
 
-    def Select_Tray(self,tray_names=None):
+    def Select_Tray(self,tray_names=None,short_title=None):
         self.clear_widgets()
         self.add_menu()
         self.root.geometry()
@@ -351,16 +352,17 @@ class CrystalDex_main:
         select_tray_name_combobox = ttk.Combobox(select_tray_frame,values=tray_names,textvariable=tray_name)
         select_tray_name_combobox.grid(column=0,row=1)
 
-        none_of_the_above_var = BooleanVar()
         none_of_the_above_label = ttk.Label(select_tray_frame,text='If none of the above match your tray, click here:')
         none_of_the_above_label.grid(column=0,row=2)
-        none_of_the_above_checkbutton = ttk.Checkbutton(select_tray_frame,variable=none_of_the_above_var,onvalue=True,offvalue=False)
-        none_of_the_above_checkbutton.grid(column=1,row=2)
-        if none_of_the_above_var:
-            tray_name.set("")
+        ttk.Button(select_tray_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
+
+        def make_new_tray(short_title):
+            new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
+            new_worksheet.title = short_title
+            self.proceed(self.wb[short_title])
 
         ttk.Button(select_tray_frame,text="Save selection and proceed",
-        command=lambda: self.proceed(self.wb[str(tray_name.get())])).grid(column=1,row=14,sticky=(N,W))
+        command=lambda: self.proceed(self.wb[str(tray_name.get())])).grid(column=0,row=3)
 
     def Edit_Tray(self):
         self.clear_widgets()
@@ -404,7 +406,9 @@ class CrystalDex_main:
                     if all(term in tags for term in [date,crystal_screen,target_protein]):
                         tray_names.append(ws.title)
                 print(f'tray_names: {tray_names}')
-                self.Select_Tray(tray_names)
+                full_title = f'{target_protein}_{crystal_screen}_{date}_1'
+                short_title = full_title[:26]
+                self.Select_Tray(tray_names,short_title)
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
@@ -422,7 +426,7 @@ class CrystalDex_main:
                 new_worksheet['H1'] = target_protein_top_left_stock_concentration
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
-                self.wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
+                self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
                 SeBaView_wrapper = self.load_SeBaView()
                 self.identify_subwell(new_worksheet,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
