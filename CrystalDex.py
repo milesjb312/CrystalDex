@@ -22,7 +22,7 @@ from tkinter import filedialog
 #Box integration imports:
 #https://github.com/box/box-python-sdk-gen/tree/main
 import box_sdk_gen
-from box_sdk_gen import BoxClient, BoxOAuth, OAuthConfig, FileTokenStorage, BoxSDKError
+from box_sdk_gen import BoxClient, BoxOAuth, OAuthConfig, FileTokenStorage, BoxSDKError, UploadFileAttributes, UploadFileAttributesParentField
 import webbrowser
 
 #SebaView integration imports:
@@ -46,6 +46,7 @@ icon_path = os.path.join(script_dir,"crystaldex_icon.png")
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
 crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
+os.makedirs(crystal_pictures,exist_ok=True)
 #Fix this so it only moves .jpegs and move it to the right area.
 
 def on_click(x,y,button,pressed):
@@ -405,7 +406,7 @@ class CrystalDex_main:
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
                 SeBaView_wrapper = self.load_SeBaView()
-                self.identify_subwell(new_worksheet,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+                self.identify_subwell(wb,new_worksheet,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
     def identify_subwell(self,wb,ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         self.clear_widgets()
@@ -509,14 +510,24 @@ class CrystalDex_main:
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
         for filename in os.listdir(downloads):
             file_path = os.path.join(downloads, filename)
-            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg')) and time.time() - os.path.getmtime(file_path)<10:
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
                 try:
                     new_path = shutil.move(file_path, crystal_pictures)
                     print(f"Moved: {filename}")
                     #PUT IN code for uploading the file to Box here.
-                    with open(new_path,'rb') as image_file:
-#                       upload_file = self.client.uploads.upload_file() THIS IS WHERE TO WORK. Don't use AI, cuz it doesn't know how to do this....
-                        pass
+                    with open(new_path,'rb') as image_stream:
+                        uploading_file_return = self.client.uploads.upload_file(
+                            UploadFileAttributes(
+                                name=filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
+                            ),
+                            image_stream
+                        )
+                        uploading_file = uploading_file_return.entries[0]
+                        #Change this so that instead, each uploading_file gets added to a list and then when the user is done imaging their tray, it uploads everything at once.
+                        self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                        shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
+                        print(f'shared_link: {shared_link_url}')
+
                 except Exception as e:
                     print(f"Failed to move {filename}: {e}")
         #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
