@@ -61,6 +61,7 @@ class CrystalDex_main:
         #Frequently accessed values (will be turned into a .json soon):
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
+        self.crystal_size = [0,0]
 
         #Tkinter initializations
         root=Tk()
@@ -149,6 +150,7 @@ class CrystalDex_main:
                 SeBaView_wrapper = SeBaView_main_window.wrapper_object()
                 SeBaView_wrapper.set_focus()
                 SeBaView_wrapper.maximize()
+                
                 print("SeBaView main window focused successfully.")
             except Exception as e:
                 print("Failed to find or focus the SeBaView window.")
@@ -411,9 +413,7 @@ class CrystalDex_main:
     def identify_subwell(self,wb,ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         self.clear_widgets()
         self.add_menu()
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        self.root.geometry(f"{screen_width // 4}x{screen_height}+0+0")
+        self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
         subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
         subwell_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
@@ -443,32 +443,53 @@ class CrystalDex_main:
         subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
         subwell_drop_down.grid(column=2,row=4)
 
+        crystal_width_var = StringVar()
+        crystal_width_label = ttk.Label(subwell_frame,text='crystal width:')
+        crystal_width_label.grid(column=1,row=5)
+        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width_var,state=DISABLED)
+        crystal_width_entry.grid(column=2,row=5)
+
+        crystal_height_var = StringVar()
+        crystal_height_label = ttk.Label(subwell_frame,text='crystal height:')
+        crystal_height_label.grid(column=1,row=6)
+        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height_var,state=DISABLED)
+        crystal_height_entry.grid(column=2,row=6)
         number_of_crystals_label = None
         number_of_crystals_var = None
 
         possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
-        possible_salt_crystals_label.grid(column=1,row=5)
+        possible_salt_crystals_label.grid(column=1,row=7)
         possible_salt_crystals_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var,onvalue=True,offvalue=False).grid(column=2,row=5)
+        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var,onvalue=True,offvalue=False).grid(column=2,row=7)
 
         precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
-        precipitation_label.grid(column=1,row=6)
+        precipitation_label.grid(column=1,row=8)
         precipitation_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=precipitation_var,onvalue=True,offvalue=False).grid(column=2,row=6)
+        ttk.Checkbutton(subwell_frame,variable=precipitation_var,onvalue=True,offvalue=False).grid(column=2,row=8)
 
         microcrystals_label = ttk.Label(subwell_frame,text="Microcrystals present")
-        microcrystals_label.grid(column=1,row=7)
+        microcrystals_label.grid(column=1,row=9)
         microcrystals_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=microcrystals_var,onvalue=True,offvalue=False).grid(column=2,row=7)
+        ttk.Checkbutton(subwell_frame,variable=microcrystals_var,onvalue=True,offvalue=False).grid(column=2,row=9)
 
         glassy_protein_or_artifacts_label = ttk.Label(subwell_frame,text="Glassy protein or artifacts present")
-        glassy_protein_or_artifacts_label.grid(column=1,row=8)
+        glassy_protein_or_artifacts_label.grid(column=1,row=10)
         glassy_protein_or_artifacts_var = BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=8)
+        ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=10)
 
         now = datetime.now()
         date_snapped = now.strftime('%m-%d-%Y')
-        
+                
+        def update_crystal_size_vars():
+            crystal_width_var.set(f'{self.crystal_size[0]}')
+            crystal_height_var.set(f'{self.crystal_size [1]}')
+
+        ttk.Button(subwell_frame,text ='Measure Crystal',
+                   command=lambda: self.measure_crystal(
+                       SeBaView_wrapper,
+                       update_crystal_size_vars
+                   )).grid(column=1,row=11)
+
         #This function is having image_title issues...
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
@@ -484,7 +505,6 @@ class CrystalDex_main:
                      date_set,
                      date_snapped
                 )).grid(column=1,row=14,sticky=(N,W))
-        
         for child in subwell_frame.winfo_children():
             child.grid_configure(padx=15,pady=15)
         self.refocus()
@@ -542,6 +562,57 @@ class CrystalDex_main:
         wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
         self.Box_Save()
         self.refocus()
+
+    def measure_crystal(self,SeBaView_wrapper,function_to_run):
+        self.crystal_size = [0,0]
+        SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
+        measure_tool_window = Toplevel(self.root)
+        icon = PhotoImage(file=icon_path)
+        measure_tool_window.iconphoto(True,icon)
+        measure_tool_window.title("Crystal Measuring Tool")
+        measure_tool_window.geometry(f'{SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
+        measure_tool_window.resizable(FALSE,FALSE)
+        measure_tool_window.attributes('-alpha','0.1')
+        measure_tool = Canvas(measure_tool_window,width=measure_tool_window.winfo_width(),height=measure_tool_window.winfo_height(),bg='white')
+        measure_tool.pack(fill='both',expand=True)
+        self.mouse_pressed = False
+        self.line_start = None
+        self.line_end = None
+        measure_tool_window.deiconify()
+        measure_tool_window.lift()
+        measure_tool_window.focus_force()
+
+        def poll_mouse():
+            nonlocal measure_tool,measure_tool_window
+            global mouse_is_down
+            if mouse_is_down and not self.mouse_pressed:
+                self.mouse_pressed = True
+                self.line_start = measure_tool_window.winfo_pointerxy()
+                print(f'self.line_start: {self.line_start}')
+            elif not mouse_is_down and self.mouse_pressed:
+                self.mouse_pressed = False
+                self.line_end = measure_tool_window.winfo_pointerxy()
+                print(f'self.line_end: {self.line_end}')
+                measure_tool.create_line(self.line_start[0]-self.screen_width // 4, self.line_start[1]-30,
+                                            self.line_end[0]-self.screen_width // 4, self.line_end[1]-30, fill="blue", width=2)
+                if self.crystal_size[0] == 0:
+                    self.crystal_size[0] = int(((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
+                    print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
+                    measure_tool_window.deiconify()
+                    measure_tool_window.lift()
+                    measure_tool_window.focus_force()
+                elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
+                    self.crystal_size[1] = int(((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
+                    print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
+                    measure_tool_window.deiconify()
+                    measure_tool_window.lift()
+                    measure_tool_window.focus_force()
+            if self.crystal_size[1] == 0:
+                measure_tool_window.after(50,poll_mouse)
+            else:
+                if callable(function_to_run):
+                    function_to_run()
+        poll_mouse()
 
 if __name__ == "__main__":
     app = CrystalDex_main()
