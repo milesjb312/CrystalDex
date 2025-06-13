@@ -523,6 +523,9 @@ class CrystalDex_main:
             child.grid_configure(padx=15,pady=15)
         self.refocus()
 
+        ttk.Button(subwell_frame,text="Done",
+                   command=lambda: self.Box_Save()).grid(column=1,row=15,sticky=(N,W))
+
     def proceed(self,ws):
         SeBaView_wrapper = self.load_SeBaView()
         date_set = ws['D1'].value
@@ -567,7 +570,6 @@ class CrystalDex_main:
         #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
         #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')
         self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
-        self.Box_Save()
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
         self.refocus()
