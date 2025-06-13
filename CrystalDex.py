@@ -81,7 +81,7 @@ class CrystalDex_main:
         #Access Crystal_Trays_Library or the Mastercopy:
         file_download = None
         try:
-            file_id = '1862599427539'
+            file_id = '1892938696722'
             file_download = self.client.downloads.download_file(file_id).read()
         except FileNotFoundError:
             file_id = '1861370891462'
@@ -97,6 +97,7 @@ class CrystalDex_main:
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
         self.crystal_size = [0,0]
+        self.picture_upload_paths = []
 
         #Tkinter initializations
         root=Tk()
@@ -123,11 +124,24 @@ class CrystalDex_main:
         self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
                 name="Crystal_Trays_Library.xlsx",
-                id="1862599427539"),
-                file_id="1862599427539",
+                id="320928486478"),
+                file_id="1892938696722",
                 file=open(os.path.abspath("Crystal_Trays_Library.xlsx"),"rb"
                 )
             )
+        for new_path in range(len(self.picture_upload_paths)):
+            with open(new_path[0],'rb') as image_stream:
+                uploading_file_return = self.client.uploads.upload_file(
+                    UploadFileAttributes(
+                        name=new_path[1],parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
+                    ),
+                    image_stream
+                )
+                uploading_file = uploading_file_return.entries[0]
+                #Change this so that instead, each uploading_file gets added to a list and then when the user is done imaging their tray, it uploads everything at once.
+                self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
+                print(f'shared_link: {shared_link_url}')
     
     def load_SeBaView(self):
         exe_path = None
@@ -533,25 +547,13 @@ class CrystalDex_main:
             if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
                 try:
                     new_path = shutil.move(file_path, crystal_pictures)
+                    self.picture_upload_paths.append([new_path,filename])
                     print(f"Moved: {filename}")
-                    #PUT IN code for uploading the file to Box here.
-                    with open(new_path,'rb') as image_stream:
-                        uploading_file_return = self.client.uploads.upload_file(
-                            UploadFileAttributes(
-                                name=filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
-                            ),
-                            image_stream
-                        )
-                        uploading_file = uploading_file_return.entries[0]
-                        #Change this so that instead, each uploading_file gets added to a list and then when the user is done imaging their tray, it uploads everything at once.
-                        self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                        shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
-                        print(f'shared_link: {shared_link_url}')
-
                 except Exception as e:
                     print(f"Failed to move {filename}: {e}")
+
         #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
-        well_to_excel_dict = {'A':8,'B':19,'C':30,'D':41,'E':52,'F':63,'G':74,'H':85,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
+        well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
         row = well_to_excel_dict.get(well_row)
         column = well_to_excel_dict.get(well_column)
         
@@ -560,61 +562,66 @@ class CrystalDex_main:
             picture_link_cell = picture_link_cell.offset(row=0,column=2)
         elif subwell=='bottom_left':
             picture_link_cell = picture_link_cell.offset(row=5,column=0)
-        print(f'row: {picture_link_cell.row()}, column: {picture_link_cell.column()}')
+        print(f'row: {picture_link_cell.row}, column: {picture_link_cell.column}')
         picture_link_cell.value = image_title
         #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
-        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')#This is how to fill other cells as a reference of the picture_link_cell
-        self.wb.save(filename=os.path.abspath("Crystal_Trays_Library.xlsx"))
+        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')
+        self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
         self.Box_Save()
+        if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
+            self.measure_tool_window.destroy()
         self.refocus()
 
     def measure_crystal(self,SeBaView_wrapper,function_to_run):
-        self.clear_widgets()
         self.crystal_size = [0,0]
         SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
-        measure_tool_window = Toplevel(self.root)
+        if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
+            self.measure_tool_window.destroy()
+            self.measure_tool_window = Toplevel(self.root)
+        else:
+            self.measure_tool_window = Toplevel(self.root)
         icon = PhotoImage(file=icon_path)
-        measure_tool_window.iconphoto(True,icon)
-        measure_tool_window.title("Crystal Measuring Tool")
-        measure_tool_window.geometry(f'{SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
-        measure_tool_window.resizable(FALSE,FALSE)
-        measure_tool_window.attributes('-alpha','0.1')
-        measure_tool = Canvas(measure_tool_window,width=measure_tool_window.winfo_width(),height=measure_tool_window.winfo_height(),bg='white')
+        self.measure_tool_window.iconphoto(True,icon)
+        self.measure_tool_window.title("Crystal Measuring Tool")
+        self.measure_tool_window.geometry(f'{SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
+        self.measure_tool_window.resizable(FALSE,FALSE)
+        self.measure_tool_window.attributes('-alpha','0.1')
+        measure_tool = Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
         measure_tool.pack(fill='both',expand=True)
         self.mouse_pressed = False
         self.line_start = None
         self.line_end = None
-        measure_tool_window.deiconify()
-        measure_tool_window.lift()
-        measure_tool_window.focus_force()
+        self.measure_tool_window.deiconify()
+        self.measure_tool_window.lift()
+        self.measure_tool_window.focus_force()
 
         def poll_mouse():
-            nonlocal measure_tool,measure_tool_window
+            nonlocal measure_tool
             global mouse_is_down
             if mouse_is_down and not self.mouse_pressed:
                 self.mouse_pressed = True
-                self.line_start = measure_tool_window.winfo_pointerxy()
+                self.line_start = self.measure_tool_window.winfo_pointerxy()
                 print(f'self.line_start: {self.line_start}')
             elif not mouse_is_down and self.mouse_pressed:
                 self.mouse_pressed = False
-                self.line_end = measure_tool_window.winfo_pointerxy()
+                self.line_end = self.measure_tool_window.winfo_pointerxy()
                 print(f'self.line_end: {self.line_end}')
                 measure_tool.create_line(self.line_start[0]-self.screen_width // 4, self.line_start[1]-30,
                                             self.line_end[0]-self.screen_width // 4, self.line_end[1]-30, fill="blue", width=2)
                 if self.crystal_size[0] == 0:
                     self.crystal_size[0] = int(((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
                     print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
-                    measure_tool_window.deiconify()
-                    measure_tool_window.lift()
-                    measure_tool_window.focus_force()
+                    self.measure_tool_window.deiconify()
+                    self.measure_tool_window.lift()
+                    self.measure_tool_window.focus_force()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
                     self.crystal_size[1] = int(((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
                     print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
-                    measure_tool_window.deiconify()
-                    measure_tool_window.lift()
-                    measure_tool_window.focus_force()
+                    self.measure_tool_window.deiconify()
+                    self.measure_tool_window.lift()
+                    self.measure_tool_window.focus_force()
             if self.crystal_size[1] == 0:
-                measure_tool_window.after(50,poll_mouse)
+                self.measure_tool_window.after(50,poll_mouse)
             else:
                 if callable(function_to_run):
                     function_to_run()
