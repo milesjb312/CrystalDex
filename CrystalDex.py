@@ -97,6 +97,7 @@ class CrystalDex_main:
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
         self.crystal_size = [0,0]
+        self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
         self.picture_upload_paths = []
 
         #Tkinter initializations
@@ -463,12 +464,19 @@ class CrystalDex_main:
         crystal_width_label.grid(column=1,row=5)
         crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width_var,state=DISABLED)
         crystal_width_entry.grid(column=2,row=5)
+        um_width_label = ttk.Label(subwell_frame,text='um')
+        um_width_label.grid(column=3,row=5)
 
         crystal_height_var = StringVar()
         crystal_height_label = ttk.Label(subwell_frame,text='crystal height:')
         crystal_height_label.grid(column=1,row=6)
         crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height_var,state=DISABLED)
         crystal_height_entry.grid(column=2,row=6)
+        um_row_label = ttk.Label(subwell_frame,text='um')
+        um_row_label.grid(column=3,row=6)
+
+
+
         number_of_crystals_label = None
         number_of_crystals_var = None
 
@@ -567,6 +575,7 @@ class CrystalDex_main:
             picture_link_cell = picture_link_cell.offset(row=5,column=0)
         print(f'row: {picture_link_cell.row}, column: {picture_link_cell.column}')
         picture_link_cell.value = image_title
+        #Move this code to the Box Save function because uploading and getting links is time-intensive. May be a puzzle!
         #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
         #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')
         self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
@@ -611,13 +620,13 @@ class CrystalDex_main:
                 measure_tool.create_line(self.line_start[0]-self.screen_width // 4, self.line_start[1]-30,
                                             self.line_end[0]-self.screen_width // 4, self.line_end[1]-30, fill="blue", width=2)
                 if self.crystal_size[0] == 0:
-                    self.crystal_size[0] = int(((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
+                    self.crystal_size[0] = int((((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
                     self.measure_tool_window.focus_force()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
-                    self.crystal_size[1] = int(((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)
+                    self.crystal_size[1] = int((((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
