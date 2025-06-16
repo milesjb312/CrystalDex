@@ -47,18 +47,11 @@ os.makedirs(crystal_pictures,exist_ok=True)
 
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
-
-"""likely_picture_paths = [
-    os.path.expanduser("~/Downloads"),
-    os.path.expanduser("~/Documents"),
-    os.path.expanduser("~/Pictures"),
-    home
-]
-"""
+desktop = os.path.expanduser("~/Desktop")
 
 def on_click(x,y,button,pressed):
-                global mouse_is_down
-                mouse_is_down = pressed
+    global mouse_is_down
+    mouse_is_down = pressed
 
 listener = mouse.Listener(on_click=on_click)
 listener.start()
@@ -106,6 +99,7 @@ class CrystalDex_main:
         self.crystal_size = [0,0]
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
         self.picture_upload_paths = []
+        self.button_location = None
 
         #Tkinter initializations
         root=Tk()
@@ -137,20 +131,22 @@ class CrystalDex_main:
                 file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
                 )
             )
-        for new_path in range(len(self.picture_upload_paths)):
-            with open(new_path[0],'rb') as image_stream:
+        for image_filename in os.listdir(crystal_pictures):
+            file_path = os.path.join(crystal_pictures, image_filename)
+            with open(file_path,'rb') as image_stream:
                 uploading_file_return = self.client.uploads.upload_file(
                     UploadFileAttributes(
-                        name=new_path[1],parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
+                        name=image_filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
                     ),
                     image_stream
                 )
                 uploading_file = uploading_file_return.entries[0]
                 self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
+                shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
+                shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
                 print(f'shared_link: {shared_link_url}')
-                #add shared links to excel...
-            self.startup()
+                #Add code here to find the correct excel sheet for the file and add the link to it...
+        self.startup()
     
     def load_SeBaView(self):
         exe_path = None
@@ -388,13 +384,13 @@ class CrystalDex_main:
                     if all(term in tags for term in [date,crystal_screen,target_protein]):
                         tray_names.append(ws.title)
                 print(f'tray_names: {tray_names}')
-                full_title = f'{target_protein}_{crystal_screen}_{date}_1'
+                full_title = f'{date}_{crystal_screen}_{target_protein}_1'
                 short_title = full_title[:26]
                 self.Select_Tray(tray_names,short_title)
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
-                full_title = f'{target_protein}_{crystal_screen}_{date}_1'
+                full_title = f'{date}_{crystal_screen}_{target_protein}_1'
                 short_title = full_title[:26]
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
@@ -553,13 +549,16 @@ class CrystalDex_main:
         custom_tags_values = ws['D5'].value
         self.identify_subwell(ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
-    def monitor_mouse(SeBaView_wrapper_rect):
+    def monitor_mouse(self,SeBaView_wrapper_rect):
+        print(f'monitor_mouse is running...')
         if mouse_is_down:
             x, y = pyautogui.position()
             rel_x = x - SeBaView_wrapper_rect.left
             rel_y = y - SeBaView_wrapper_rect.top
-            print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
+            print(f'Mouse pressed relative to SeBaView window: ({rel_x}, {rel_y})')
+            self.button_location = rel_x,rel_y
         time.sleep(0.1)
+        print(f'monitor mouse is done.')
 
     def take_picture(
             self,
@@ -585,16 +584,22 @@ class CrystalDex_main:
         SeBaView_wrapper.set_focus() #Is this needed? Test later...
         SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
-        #The following two lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
+        #The following three lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
         #SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
-        #self.root.after(100,lambda: self.monitor_mouse(SeBaView_wrapper_rect))
+        #while self.button_location is None:
+        #    self.monitor_mouse(SeBaView_wrapper_rect)
+        for i in range(2):
+            SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-        for filename in os.listdir(downloads):
-            file_path = os.path.join(downloads, filename)
+        time.sleep(3)#sleep to let the file settle so the next command will be able to grab and move it
+
+        for filename in os.listdir(desktop):
+            print(f'filename: {filename}')
+            file_path = os.path.join(desktop, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
                 try:
-                    new_path = shutil.move(file_path, crystal_pictures)
-                    self.picture_upload_paths.append([new_path,filename])
+                    shutil.move(file_path, crystal_pictures)
+                    self.picture_upload_filenames.append([filename])
                     print(f"Moved: {filename}")
                 except Exception as e:
                     print(f"Failed to move {filename}: {e}")
@@ -619,7 +624,7 @@ class CrystalDex_main:
             precipitation,
             microcrystals,
             glassy_protein_or_artifacts,
-        picture_link_cell.offset(row=5,column=0).value =f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
+        picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
         picture_link_cell.offset(row=6,column=0).value = notes
 
         #Move this code to the Box Save function because uploading and getting links is time-intensive. May be a puzzle!
@@ -661,11 +666,9 @@ class CrystalDex_main:
             if mouse_is_down and not self.mouse_pressed:
                 self.mouse_pressed = True
                 self.line_start = self.measure_tool_window.winfo_pointerxy()
-                print(f'self.line_start: {self.line_start}')
             elif not mouse_is_down and self.mouse_pressed:
                 self.mouse_pressed = False
                 self.line_end = self.measure_tool_window.winfo_pointerxy()
-                print(f'self.line_end: {self.line_end}')
                 measure_tool.create_line(self.line_start[0]-self.screen_width // 4, self.line_start[1]-30,
                                             self.line_end[0]-self.screen_width // 4, self.line_end[1]-30, fill="blue", width=2)
                 if self.crystal_size[0] == 0:
@@ -694,8 +697,6 @@ class CrystalDex_main:
         self.clear_widgets()
         self.add_menu()
         upload_xtal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
-
-
 
 if __name__ == "__main__":
     app = CrystalDex_main()
