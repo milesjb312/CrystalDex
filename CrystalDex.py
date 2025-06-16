@@ -40,14 +40,21 @@ import pywinauto.keyboard
 #https://realpython.com/pyinstaller-python/
 
 #Paths
-script_dir = os.path.dirname(os.path.abspath(__file__))
+script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
 icon_path = os.path.join(script_dir,"crystaldex_icon.png")
+crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
+os.makedirs(crystal_pictures,exist_ok=True)
 
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
-crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
-os.makedirs(crystal_pictures,exist_ok=True)
-#Fix this so it only moves .jpegs and move it to the right area.
+
+"""likely_picture_paths = [
+    os.path.expanduser("~/Downloads"),
+    os.path.expanduser("~/Documents"),
+    os.path.expanduser("~/Pictures"),
+    home
+]
+"""
 
 def on_click(x,y,button,pressed):
                 global mouse_is_down
@@ -139,10 +146,10 @@ class CrystalDex_main:
                     image_stream
                 )
                 uploading_file = uploading_file_return.entries[0]
-                #Change this so that instead, each uploading_file gets added to a list and then when the user is done imaging their tray, it uploads everything at once.
                 self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
                 shared_link_url = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link")
                 print(f'shared_link: {shared_link_url}')
+                #add shared links to excel...
             self.startup()
     
     def load_SeBaView(self):
@@ -157,26 +164,15 @@ class CrystalDex_main:
                 filetypes=[("Executable files", "*.exe")]
             )
         if exe_path:
-            """
-                #First, kill any current SeBaView window, then proceed.
-                for proc in psutil.process_iter(attrs=["pid", "name", "exe"]):
-                    try:
-                        if proc.info["name"] and "SeBaView" in proc.info["name"]:
-                            print(f"Killing SeBaView process: PID {proc.info['pid']}")
-                            proc.kill()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-                time.sleep(2)
-            """
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
-            SeBaView = Application(backend="uia").start(exe_path)
+            self.SeBaView = Application(backend="uia").start(exe_path)
             time.sleep(5)
-            for i, w in enumerate(SeBaView.windows()):
+            for i, w in enumerate(self.SeBaView.windows()):
                 print(f'[{i}] Title: {w.window_text()}')
             try:
                 # Try to wait for the first active window
-                SeBaView_main_window = SeBaView.window(title_re=".*SeBaView.*")
+                SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
                 #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
                 SeBaView_wrapper = SeBaView_main_window.wrapper_object()
                 SeBaView_wrapper.set_focus()
@@ -184,23 +180,9 @@ class CrystalDex_main:
                 
                 print("SeBaView main window focused successfully.")
             except Exception as e:
-                print("Failed to find or focus the SeBaView window.")
+                print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.")
                 print(f"Error: {e}")
 
-            """
-            #This code is really buggy and needs to be moved to another section, but it's useful for figuring out the location of buttons in SeBaView.
-            SeBaView_wrapper_rect = SeBaView_main_window.rectangle()
-            try:
-                while True:
-                    if mouse_is_down:
-                        x, y = pyautogui.position()
-                        rel_x = x - SeBaView_wrapper_rect.left
-                        rel_y = y - SeBaView_wrapper_rect.top
-                        print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
-                    time.sleep(0.1)
-            except KeyboardInterrupt:
-                pass
-            """
             for i in range(2):
                 SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
             return SeBaView_wrapper
@@ -571,6 +553,14 @@ class CrystalDex_main:
         custom_tags_values = ws['D5'].value
         self.identify_subwell(ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
+    def monitor_mouse(SeBaView_wrapper_rect):
+        if mouse_is_down:
+            x, y = pyautogui.position()
+            rel_x = x - SeBaView_wrapper_rect.left
+            rel_y = y - SeBaView_wrapper_rect.top
+            print(f'Mouse pressed relative to window: ({rel_x},{rel_y})')
+        time.sleep(0.1)
+
     def take_picture(
             self,
             SeBaView_wrapper,
@@ -595,7 +585,10 @@ class CrystalDex_main:
         SeBaView_wrapper.set_focus() #Is this needed? Test later...
         SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
-        pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #I believe this code will let me type into whatever location is currently focused, but I haven't tested it yet.
+        #The following two lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
+        #SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
+        #self.root.after(100,lambda: self.monitor_mouse(SeBaView_wrapper_rect))
+        pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
         for filename in os.listdir(downloads):
             file_path = os.path.join(downloads, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
