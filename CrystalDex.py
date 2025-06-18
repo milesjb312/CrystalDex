@@ -96,6 +96,12 @@ class CrystalDex_main:
         #Other frequently accessed values (will be turned into a .json soon):
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
+        self.crystal_screen_symbols = {'Crystal_Screen':'CS',
+                                       'Index':'IN',
+                                       'PEG_Custom':'PC',
+                                       'PEG_Ion':'PI',
+                                       'Salt_Rx':'SR',
+                                       'Wizard':'WI'}
         self.crystal_size = [0,0]
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
         self.picture_upload_paths = []
@@ -288,13 +294,11 @@ class CrystalDex_main:
         custom_tags_var = StringVar()
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
-        if today_var.get():
-            date_set_var.set(datetime.now().strftime('%m-%d-%Y'))
-            print(f'date_set_var.get() = {date_set_var.get()}')
 
         ttk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
                        str(date_set_var.get()),
+                       bool(today_var.get()),
                        str(crystal_screen_var.get()),
                        str(target_protein_var.get()),
                        str(target_protein_top_left_stock_concentration_var.get()),
@@ -319,7 +323,7 @@ class CrystalDex_main:
         if tray_names == None:
             tray_names = []
             for ws in self.wb:
-                tray_names.append(ws.title)
+                tray_names.append([ws.title,ws['A1']])
 
         select_tray_name_label = ttk.Label(select_tray_frame,text=(
             'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
@@ -337,6 +341,7 @@ class CrystalDex_main:
         def make_new_tray(short_title):
             new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
             new_worksheet.title = short_title
+            #This proceed thing is wrong. It needs to instead copy what is done after a normal tray is made...
             self.proceed(self.wb[short_title])
 
         ttk.Button(select_tray_frame,text="Save selection and proceed",
@@ -347,16 +352,19 @@ class CrystalDex_main:
         self.add_menu()
         edit_tray_frame = ttk.Frame(self.root, padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
 
-    def Index_Tray(self,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
+    def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         print(f'values passed in: {date_set}, {crystal_screen}, {target_protein}, {target_protein_top_left_stock_concentration}, {target_protein_top_right_stock_concentration}, {target_protein_bottom_left_stock_concentration}, {crystallization_chaperone}, {custom_tags_values}')
         indexable = False
-        try:
-            date = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
-            print(f'indexing! date: {date_set}')
-            indexable = True
-        except ValueError:
-            messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
-            print(f'not indexing. date: {date_set}')
+        if today:
+            date_set = (datetime.now().strftime('%m-%d-%Y'))
+        else:
+            try:
+                date = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
+                print(f'indexing! date: {date_set}')
+                indexable = True
+            except ValueError:
+                messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
+                print(f'not indexing. date: {date_set}')
         if crystal_screen in self.crystal_screen_values:
             indexable = True
         else: 
@@ -384,17 +392,18 @@ class CrystalDex_main:
                     if all(term in tags for term in [date,crystal_screen,target_protein]):
                         tray_names.append(ws.title)
                 print(f'tray_names: {tray_names}')
-                full_title = f'{date}_{crystal_screen}_{target_protein}_1'
+                full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
                 self.Select_Tray(tray_names,short_title)
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
-                full_title = f'{date}_{crystal_screen}_{target_protein}_1'
+                full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
                 print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
                 all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values]
+                new_worksheet['A1'] = full_title
                 new_worksheet['K1'] = ', '.join(map(str,all_tags))
                 new_worksheet['D1'] = date_set
                 new_worksheet['D2'] = crystallization_chaperone
