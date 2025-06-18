@@ -8,6 +8,7 @@ import os
 import shutil
 import json
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
 
@@ -105,6 +106,7 @@ class CrystalDex_main:
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
         self.picture_upload_filenames = {}
         self.button_location = None
+        self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
 
         #Tkinter initializations
         root=Tk()
@@ -613,13 +615,13 @@ class CrystalDex_main:
         picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
         picture_link_cell.offset(row=3,column=0).value = f'{number_of_crystals}'
         picture_link_cell.offset(row=4,column=0).value = f'{shape}'
-        if possible_salt_crystals:
-            precipitation,
-            microcrystals,
-            glassy_protein_or_artifacts,
         picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
         picture_link_cell.offset(row=6,column=0).value = notes
-        
+
+        for x in range(7):
+            picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
+            picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
+            
         self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
 
         for filename in os.listdir(desktop):
