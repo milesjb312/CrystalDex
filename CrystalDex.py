@@ -103,6 +103,7 @@ class CrystalDex_main:
                                        'Salt_Rx':'SR',
                                        'Wizard':'WI'}
         self.crystal_size = [0,0]
+        self.harvesting = False
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
         self.picture_upload_filenames = {}
         self.button_location = None
@@ -184,18 +185,19 @@ class CrystalDex_main:
                 # Try to wait for the first active window
                 SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
                 #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
-                SeBaView_wrapper = SeBaView_main_window.wrapper_object()
-                SeBaView_wrapper.set_focus()
-                SeBaView_wrapper.maximize()
+                self.SeBaView_wrapper = SeBaView_main_window.wrapper_object()
+                self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
+                self.SeBaView_wrapper.maximize()
+                self.SeBaView_wrapper.set_focus()
+                for i in range(2):
+                    self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
+                    self.SeBaView_wrapper.minimize()
             except Exception as e:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
 
-            for i in range(2):
-                SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
-            return SeBaView_wrapper
-
     def startup(self):
+        self.load_SeBaView()
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
@@ -362,8 +364,7 @@ class CrystalDex_main:
             target_protein_top_right_stock_concentration = ws['H2'].value
             target_protein_bottom_left_stock_concentration = ws['H3'].value
             custom_tags_values = ws['D5'].value
-            SeBaView_wrapper = self.load_SeBaView()
-            self.identify_subwell(ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+            self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
     def Edit_Tray(self):
         self.clear_widgets()
@@ -372,6 +373,8 @@ class CrystalDex_main:
 
     def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         indexable = False
+        self.SeBaView_wrapper.maximize()
+        self.SeBaView_wrapper.set_focus()
         if today:
             date_set = (datetime.now().strftime('%m-%d-%Y'))
         else:
@@ -426,10 +429,9 @@ class CrystalDex_main:
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
-                SeBaView_wrapper = self.load_SeBaView()
-                self.identify_subwell(new_worksheet,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+                self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
-    def identify_subwell(self,ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
+    def identify_subwell(self,ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
@@ -437,6 +439,7 @@ class CrystalDex_main:
         subwell_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
+        self.refocus()
 
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.")
         ensure_magnified_label.grid(column=1,row=1)
@@ -523,15 +526,10 @@ class CrystalDex_main:
             crystal_height_var.set(f'{self.crystal_size [1]}')
 
         ttk.Button(subwell_frame,text ='Measure Crystal',
-                   command=lambda: self.measure_crystal(
-                       SeBaView_wrapper,
-                       update_crystal_size_vars
-                   )).grid(column=1,row=13)
-
-        #This function is having image_title issues...
+                   command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=13)
+        
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
-                     SeBaView_wrapper,
                      ws,
                      crystallization_chaperone,
                      target_protein,
@@ -557,12 +555,12 @@ class CrystalDex_main:
             child.grid_configure(padx=5,pady=15)
         self.refocus()
 
-    def monitor_mouse(self,SeBaView_wrapper_rect):
+    def monitor_mouse(self):
         print(f'monitor_mouse is running...')
         if mouse_is_down:
             x, y = pyautogui.position()
-            rel_x = x - SeBaView_wrapper_rect.left
-            rel_y = y - SeBaView_wrapper_rect.top
+            rel_x = x - self.SeBaView_wrapper_rect.left
+            rel_y = y - self.SeBaView_wrapper_rect.top
             print(f'Mouse pressed relative to SeBaView window: ({rel_x}, {rel_y})')
             self.button_location = rel_x,rel_y
         time.sleep(0.1)
@@ -570,7 +568,6 @@ class CrystalDex_main:
 
     def take_picture(
             self,
-            SeBaView_wrapper,
             ws,
             crystallization_chaperone,
             target_protein,
@@ -587,61 +584,62 @@ class CrystalDex_main:
             date_set,
             date_snapped,
             notes):
-        image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
-        SeBaView_wrapper.set_focus() #Is this needed? Test later...
-        SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
-        time.sleep(3)
-        #The following three lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
-        #SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
-        #while self.button_location is None:
-        #    self.monitor_mouse(SeBaView_wrapper_rect)
-        for i in range(2):
-            SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
-        pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-        #time.sleep(2)#sleep to let the file settle so the next command will be able to grab and move it
+        if self.harvesting == False or self.crystal_size[1] != 0:
+            image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
+            self.SeBaView_wrapper.set_focus()
+            self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
+            time.sleep(3)
+            #The following two lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
+            #while self.button_location is None:
+            #    self.monitor_mouse(self.SeBaView_wrapper_rect)
+            for i in range(2):
+                self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
+            pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
+            #time.sleep(2)#sleep to let the file settle so the next command will be able to grab and move it
 
-        #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
-        well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
-        row = well_to_excel_dict.get(well_row)
-        column = well_to_excel_dict.get(well_column)
-        
-        picture_link_cell = ws[f'{row}{column}']
-        if subwell=='top_right':
-            picture_link_cell = picture_link_cell.offset(row=0,column=2)
-        elif subwell=='bottom_left':
-            picture_link_cell = picture_link_cell.offset(row=7,column=0)
-        picture_link_cell.value = image_title
-        picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,"%m-%d-%Y")-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
-        picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
-        picture_link_cell.offset(row=3,column=0).value = f'{number_of_crystals}'
-        picture_link_cell.offset(row=4,column=0).value = f'{shape}'
-        picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
-        picture_link_cell.offset(row=6,column=0).value = notes
-
-        for x in range(7):
-            picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
-            picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
+            #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
+            well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
+            row = well_to_excel_dict.get(well_row)
+            column = well_to_excel_dict.get(well_column)
             
-        self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+            picture_link_cell = ws[f'{row}{column}']
+            if subwell=='top_right':
+                picture_link_cell = picture_link_cell.offset(row=0,column=2)
+            elif subwell=='bottom_left':
+                picture_link_cell = picture_link_cell.offset(row=7,column=0)
+            picture_link_cell.value = image_title
+            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,"%m-%d-%Y")-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
+            picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
+            picture_link_cell.offset(row=3,column=0).value = f'{number_of_crystals}'
+            picture_link_cell.offset(row=4,column=0).value = f'{shape}'
+            picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
+            picture_link_cell.offset(row=6,column=0).value = notes
 
-        for filename in os.listdir(desktop):
-            file_path = os.path.join(desktop, filename)
-            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
-                try:
-                    shutil.move(file_path, crystal_pictures)
-                    self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
-                except Exception as e:
-                    print(f"Failed to move {filename}: {e}")
-                    print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                    self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
+            for x in range(7):
+                picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
+                picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
+                
+            self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
 
-        if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
-            self.measure_tool_window.destroy()
-        self.refocus()
+            for filename in os.listdir(desktop):
+                file_path = os.path.join(desktop, filename)
+                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
+                    try:
+                        shutil.move(file_path, crystal_pictures)
+                        self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
+                    except Exception as e:
+                        print(f"Failed to move {filename}: {e}")
+                        print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
+                        self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
 
-    def measure_crystal(self,SeBaView_wrapper,function_to_run):
+            if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
+                self.measure_tool_window.destroy()
+            self.refocus()
+        else:
+            messagebox(Text="You haven't measured your crystal, silly!")
+
+    def measure_crystal(self,function_to_run):
         self.crystal_size = [0,0]
-        SeBaView_wrapper_rect = SeBaView_wrapper.rectangle()
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
             self.measure_tool_window = Toplevel(self.root)
@@ -650,7 +648,7 @@ class CrystalDex_main:
         icon = PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
-        self.measure_tool_window.geometry(f'{SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
+        self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(FALSE,FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
         measure_tool = Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
@@ -691,6 +689,7 @@ class CrystalDex_main:
         poll_mouse()
 
     def Harvest_Crystals(self):
+        self.harvesting = True
         self.Select_Tray()
 
     def Upload_Xtal_Screen(self):
