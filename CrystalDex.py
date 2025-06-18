@@ -104,7 +104,7 @@ class CrystalDex_main:
                                        'Wizard':'WI'}
         self.crystal_size = [0,0]
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
-        self.picture_upload_paths = []
+        self.picture_upload_filenames = {}
         self.button_location = None
 
         #Tkinter initializations
@@ -138,20 +138,26 @@ class CrystalDex_main:
                 )
             )
         for image_filename in os.listdir(crystal_pictures):
-            file_path = os.path.join(crystal_pictures, image_filename)
-            with open(file_path,'rb') as image_stream:
-                uploading_file_return = self.client.uploads.upload_file(
-                    UploadFileAttributes(
-                        name=image_filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
-                    ),
-                    image_stream
-                )
-                uploading_file = uploading_file_return.entries[0]
-                self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
-                shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
-                print(f'shared_link: {shared_link_url}')
-                #Add code here to find the correct excel sheet for the file and add the link to it...
+            if image_filename in self.picture_upload_filenames.keys:
+                file_path = os.path.join(crystal_pictures, image_filename)
+                with open(file_path,'rb') as image_stream:
+                    uploading_file_return = self.client.uploads.upload_file(
+                        UploadFileAttributes(
+                            name=image_filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
+                        ),
+                        image_stream
+                    )
+                    uploading_file = uploading_file_return.entries[0]
+                    self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                    shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
+                    shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
+                    print(f'shared_link: {shared_link_url}')
+                    ws_title = f'{self.picture_upload_filenames[image_filename][0]}'
+                    ws = self.wb[ws_title]
+                    ws[self.picture_upload_filenames[image_filename][1]]
+
+                    
+                    #Add code here to find the correct excel sheet for the file and add the link to it...
         self.startup()
     
     def load_SeBaView(self):
@@ -600,18 +606,7 @@ class CrystalDex_main:
         for i in range(2):
             SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-        time.sleep(3)#sleep to let the file settle so the next command will be able to grab and move it
-
-        for filename in os.listdir(desktop):
-            print(f'filename: {filename}')
-            file_path = os.path.join(desktop, filename)
-            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
-                try:
-                    shutil.move(file_path, crystal_pictures)
-                    self.picture_upload_filenames.append([filename])
-                    print(f"Moved: {filename}")
-                except Exception as e:
-                    print(f"Failed to move {filename}: {e}")
+        #time.sleep(2)#sleep to let the file settle so the next command will be able to grab and move it
 
         #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
         well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
@@ -642,6 +637,18 @@ class CrystalDex_main:
         #self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
         
         self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+
+        for filename in os.listdir(desktop):
+            print(f'filename: {filename}')
+            file_path = os.path.join(desktop, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
+                try:
+                    shutil.move(file_path, crystal_pictures)
+                    self.picture_upload_filenames[filename] = [ws.title,picture_link_cell] #If this doesn't work, replace the picture_link_cell with: f'{row}{column}'
+                    print(f"Moved: {filename}")
+                except Exception as e:
+                    print(f"Failed to move {filename}: {e}")
+
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
         self.refocus()
