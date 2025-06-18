@@ -90,7 +90,6 @@ class CrystalDex_main:
         #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
         with open("CrystalDex_Library.xlsx","wb") as c:
             c.write(file_download)
-        print("Saving to:", os.path.abspath("CrystalDex_Library.xlsx"))
         self.wb = load_workbook(filename=os.path.abspath("CrystalDex_Library.xlsx")) #Accesses the excel workbook using the openpyxl python module
         
         #Other frequently accessed values (will be turned into a .json soon):
@@ -128,17 +127,9 @@ class CrystalDex_main:
         self.root.focus_force()
 
     def Box_Save(self):
-        #The following command uploads the Crystal Trays Library and the images to Box.
-        self.client.uploads.upload_file_version(
-            attributes=box_sdk_gen.UploadFileAttributesParentField(
-                name="CrystalDex_Library.xlsx",
-                id="320928486478"),
-                file_id="1892938696722",
-                file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
-                )
-            )
+        #The following lines upload the crystal pictures from this session into Box.
         for image_filename in os.listdir(crystal_pictures):
-            if image_filename in self.picture_upload_filenames.keys:
+            if image_filename in self.picture_upload_filenames.keys():
                 file_path = os.path.join(crystal_pictures, image_filename)
                 with open(file_path,'rb') as image_stream:
                     uploading_file_return = self.client.uploads.upload_file(
@@ -151,13 +142,22 @@ class CrystalDex_main:
                     self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
                     shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
                     shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
-                    print(f'shared_link: {shared_link_url}')
-                    ws_title = f'{self.picture_upload_filenames[image_filename][0]}'
+                    ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
                     ws = self.wb[ws_title]
-                    ws[self.picture_upload_filenames[image_filename][1]]
+                    cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                    ws[cell_id].hyperlink = shared_link_url
+                    self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
 
-                    
-                    #Add code here to find the correct excel sheet for the file and add the link to it...
+        #The following command uploads the Crystal Trays Library
+        self.client.uploads.upload_file_version(
+            attributes=box_sdk_gen.UploadFileAttributesParentField(
+                name="CrystalDex_Library.xlsx",
+                id="320928486478"),
+                file_id="1892938696722",
+                file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
+                )
+            )
+
         self.startup()
     
     def load_SeBaView(self):
@@ -175,9 +175,9 @@ class CrystalDex_main:
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             self.SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(5)
-            for i, w in enumerate(self.SeBaView.windows()):
-                print(f'[{i}] Title: {w.window_text()}')
+            time.sleep(6)
+            #for i, w in enumerate(self.SeBaView.windows()):
+            #    print(f'[{i}] Title: {w.window_text()}')
             try:
                 # Try to wait for the first active window
                 SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
@@ -185,10 +185,8 @@ class CrystalDex_main:
                 SeBaView_wrapper = SeBaView_main_window.wrapper_object()
                 SeBaView_wrapper.set_focus()
                 SeBaView_wrapper.maximize()
-                
-                print("SeBaView main window focused successfully.")
             except Exception as e:
-                print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.")
+                print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
 
             for i in range(2):
@@ -351,7 +349,19 @@ class CrystalDex_main:
             self.proceed(self.wb[short_title])
 
         ttk.Button(select_tray_frame,text="Save selection and proceed",
-        command=lambda: self.proceed(self.wb[str(tray_name.get())])).grid(column=0,row=3)
+        command=lambda: proceed(self.wb[str(tray_name.get())])).grid(column=0,row=3)
+
+        def proceed(ws):
+            date_set = ws['D1'].value
+            crystallization_chaperone = ws['D2'].value
+            crystal_screen = ws['D3'].value
+            target_protein = ws['D4'].value
+            target_protein_top_left_stock_concentration = ws['H1'].value
+            target_protein_top_right_stock_concentration = ws['H2'].value
+            target_protein_bottom_left_stock_concentration = ws['H3'].value
+            custom_tags_values = ws['D5'].value
+            SeBaView_wrapper = self.load_SeBaView()
+            self.identify_subwell(ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
     def Edit_Tray(self):
         self.clear_widgets()
@@ -359,18 +369,15 @@ class CrystalDex_main:
         edit_tray_frame = ttk.Frame(self.root, padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
 
     def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
-        print(f'values passed in: {date_set}, {crystal_screen}, {target_protein}, {target_protein_top_left_stock_concentration}, {target_protein_top_right_stock_concentration}, {target_protein_bottom_left_stock_concentration}, {crystallization_chaperone}, {custom_tags_values}')
         indexable = False
         if today:
             date_set = (datetime.now().strftime('%m-%d-%Y'))
         else:
             try:
                 date = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
-                print(f'indexing! date: {date_set}')
                 indexable = True
             except ValueError:
                 messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
-                print(f'not indexing. date: {date_set}')
         if crystal_screen in self.crystal_screen_values:
             indexable = True
         else: 
@@ -387,26 +394,23 @@ class CrystalDex_main:
             for ws in self.wb:
                 tags_cell = str(ws['K1'].value or "")
                 tags = [tag.strip() for tag in tags_cell.split(', ')]
-                print(f'tags: {tags}, [date,crystal_screen,target_protein]: {[date,crystal_screen,target_protein]}')
-                if all(term in tags for term in [date,crystal_screen,target_protein]):
+                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
                 tray_names = []
                 for ws in self.wb:
                     tags_cell = str(ws['K1'].value or "")
                     tags = [tag.strip() for tag in tags_cell.split(', ')]
-                    if all(term in tags for term in [date,crystal_screen,target_protein]):
+                    if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
                         tray_names.append(ws.title)
-                print(f'tray_names: {tray_names}')
                 full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
-                self.Select_Tray(tray_names,short_title)
+                self.Select_Tray(tray_names,short_title)    
             elif ws_possible_duplicate_count == 0:
-                print(f"No trays found with these stats; generating new tray!")
+                print(f"No trays found with these stats; generating new tray!")#change this to a Tkinter messagebox or the splash screen
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
                 full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
-                print(f'short_title: {short_title}')
                 new_worksheet.title = short_title
                 all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values]
                 new_worksheet['A1'] = full_title
@@ -551,19 +555,6 @@ class CrystalDex_main:
             child.grid_configure(padx=5,pady=15)
         self.refocus()
 
-    def proceed(self,ws):
-        #This may need to be able to access subwells eventually...
-        SeBaView_wrapper = self.load_SeBaView()
-        date_set = ws['D1'].value
-        crystal_screen = ws['D3'].value
-        target_protein = ws['D4'].value
-        target_protein_top_left_stock_concentration = ws['H1'].value
-        target_protein_top_right_stock_concentration = ws['H2'].value
-        target_protein_bottom_left_stock_concentration = ws['H3'].value
-        crystallization_chaperone = ws['D2'].value
-        custom_tags_values = ws['D5'].value
-        self.identify_subwell(ws,SeBaView_wrapper,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
-
     def monitor_mouse(self,SeBaView_wrapper_rect):
         print(f'monitor_mouse is running...')
         if mouse_is_down:
@@ -594,8 +585,7 @@ class CrystalDex_main:
             date_set,
             date_snapped,
             notes):
-        image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}' 
-        print(f'image_title: {image_title}')
+        image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
         SeBaView_wrapper.set_focus() #Is this needed? Test later...
         SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
         time.sleep(3)
@@ -618,7 +608,6 @@ class CrystalDex_main:
             picture_link_cell = picture_link_cell.offset(row=0,column=2)
         elif subwell=='bottom_left':
             picture_link_cell = picture_link_cell.offset(row=7,column=0)
-        print(f'row: {picture_link_cell.row}, column: {picture_link_cell.column}')
         picture_link_cell.value = image_title
         picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,"%m-%d-%Y")-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
         picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
@@ -630,24 +619,19 @@ class CrystalDex_main:
             glassy_protein_or_artifacts,
         picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
         picture_link_cell.offset(row=6,column=0).value = notes
-
-        #Move this code to the Box Save function because uploading and getting links is time-intensive. May be a puzzle!
-        #picture_link_cell.hyperlink()#Insert the hyperlink value into this.
-        #picture_link_cell.offset(row=0,column=1).value(f'{number_of_crystals_var.get()}')
-        #self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
         
         self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
 
         for filename in os.listdir(desktop):
-            print(f'filename: {filename}')
             file_path = os.path.join(desktop, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
                 try:
                     shutil.move(file_path, crystal_pictures)
-                    self.picture_upload_filenames[filename] = [ws.title,picture_link_cell] #If this doesn't work, replace the picture_link_cell with: f'{row}{column}'
-                    print(f"Moved: {filename}")
+                    self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
                 except Exception as e:
                     print(f"Failed to move {filename}: {e}")
+                    print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
+                    self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
 
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
@@ -689,13 +673,11 @@ class CrystalDex_main:
                                             self.line_end[0]-self.screen_width // 4, self.line_end[1]-30, fill="blue", width=2)
                 if self.crystal_size[0] == 0:
                     self.crystal_size[0] = int((((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
-                    print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
                     self.measure_tool_window.focus_force()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
                     self.crystal_size[1] = int((((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
-                    print(f'crystal_width,crystal_height: {self.crystal_size[0]}, {self.crystal_size[1]}')
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
                     self.measure_tool_window.focus_force()
