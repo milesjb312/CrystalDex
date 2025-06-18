@@ -102,6 +102,8 @@ class CrystalDex_main:
                                        'PEG_Ion':'PI',
                                        'Salt_Rx':'SR',
                                        'Wizard':'WI'}
+        self.tray_names = {}
+
         self.crystal_size = [0,0]
         self.harvesting = False
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
@@ -122,6 +124,7 @@ class CrystalDex_main:
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
+        self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
 
     def refocus(self):
         #Refocus the window if minimized
@@ -196,8 +199,14 @@ class CrystalDex_main:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
 
+    def close_SeBaView_and_root(self):
+        try:
+            self.SeBaView_wrapper.close()
+        except:
+            print(f'Failed to close SeBaView. Do it please!')
+        self.root.destroy()
+
     def startup(self):
-        self.load_SeBaView()
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
@@ -320,7 +329,7 @@ class CrystalDex_main:
         for child in new_tray_frame.winfo_children():
             child.grid_configure(padx=5,pady=5)
 
-    def Select_Tray(self,tray_names=None,short_title=None):
+    def Select_Tray(self,short_title=None):
         self.clear_widgets()
         self.add_menu()
         self.root.geometry()
@@ -328,23 +337,19 @@ class CrystalDex_main:
         select_tray_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
-        if tray_names == None:
-            tray_names = []
-            for ws in self.wb:
-                tray_names.append([ws.title,ws['A1']])
-
         select_tray_name_label = ttk.Label(select_tray_frame,text=(
             'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
             '\nPlease review the following to ensure no duplicate trays are indexed!'
         ))
         select_tray_name_label.grid(column=0,row=0)
         tray_name = StringVar()
-        select_tray_name_combobox = ttk.Combobox(select_tray_frame,values=tray_names,textvariable=tray_name)
+        select_tray_name_combobox = ttk.Combobox(select_tray_frame,values=self.tray_names.keys(),textvariable=tray_name)
         select_tray_name_combobox.grid(column=0,row=1)
 
-        none_of_the_above_label = ttk.Label(select_tray_frame,text='If none of the above match your tray, click here:')
-        none_of_the_above_label.grid(column=0,row=2)
-        ttk.Button(select_tray_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
+        if not self.harvesting:
+            none_of_the_above_label = ttk.Label(select_tray_frame,text='If none of the above match your tray, click here:')
+            none_of_the_above_label.grid(column=0,row=2)
+            ttk.Button(select_tray_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
 
         def make_new_tray(short_title):
             new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
@@ -353,18 +358,21 @@ class CrystalDex_main:
             self.proceed(self.wb[short_title])
 
         ttk.Button(select_tray_frame,text="Save selection and proceed",
-        command=lambda: proceed(self.wb[str(tray_name.get())])).grid(column=0,row=3)
+        command=lambda: print_error(self.tray_names.get(tray_name.get()))).grid(column=0,row=3)#self.proceed(self.wb[self.tray_names.get(tray_name.get())])
 
-        def proceed(ws):
-            date_set = ws['D1'].value
-            crystallization_chaperone = ws['D2'].value
-            crystal_screen = ws['D3'].value
-            target_protein = ws['D4'].value
-            target_protein_top_left_stock_concentration = ws['H1'].value
-            target_protein_top_right_stock_concentration = ws['H2'].value
-            target_protein_bottom_left_stock_concentration = ws['H3'].value
-            custom_tags_values = ws['D5'].value
-            self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+        def print_error(value):
+            print(f'self.tray_names.get(tray_name.get()): {value}')
+
+    def proceed(self,ws):
+        date_set = ws['D1'].value
+        crystallization_chaperone = ws['D2'].value
+        crystal_screen = ws['D3'].value
+        target_protein = ws['D4'].value
+        target_protein_top_left_stock_concentration = ws['H1'].value
+        target_protein_top_right_stock_concentration = ws['H2'].value
+        target_protein_bottom_left_stock_concentration = ws['H3'].value
+        custom_tags_values = ws['D5'].value
+        self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
 
     def Edit_Tray(self):
         self.clear_widgets()
@@ -402,15 +410,15 @@ class CrystalDex_main:
                 if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
-                tray_names = []
                 for ws in self.wb:
                     tags_cell = str(ws['K1'].value or "")
                     tags = [tag.strip() for tag in tags_cell.split(', ')]
+                    self.tray_names.clear()
                     if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
-                        tray_names.append(ws.title)
+                        self.tray_names[ws['A1'].value] = ws.title
                 full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
-                self.Select_Tray(tray_names,short_title)    
+                self.Select_Tray(short_title)    
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")#change this to a Tkinter messagebox or the splash screen
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
@@ -634,9 +642,9 @@ class CrystalDex_main:
 
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
-            self.refocus()
         else:
             messagebox(Text="You haven't measured your crystal, silly!")
+        self.refocus()
 
     def measure_crystal(self,function_to_run):
         self.crystal_size = [0,0]
@@ -690,6 +698,8 @@ class CrystalDex_main:
 
     def Harvest_Crystals(self):
         self.harvesting = True
+        for ws in self.wb:
+            self.tray_names[ws['A1'].value] = [ws.title]
         self.Select_Tray()
 
     def Upload_Xtal_Screen(self):
@@ -699,4 +709,5 @@ class CrystalDex_main:
 
 if __name__ == "__main__":
     app = CrystalDex_main()
+    app.load_SeBaView()
     app.startup()
