@@ -163,6 +163,9 @@ class CrystalDex_main:
                 file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
                 )
             )
+        if self.harvesting:
+            #The following lines will upload the Crystal Sendoff Sheet.
+            pass
 
         self.startup()
     
@@ -198,6 +201,7 @@ class CrystalDex_main:
             except Exception as e:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
+        self.refocus()
 
     def close_SeBaView_and_root(self):
         try:
@@ -215,9 +219,8 @@ class CrystalDex_main:
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a button placed inside it.
         #https://tkdocs.com/tutorial/text.html#basics
-        ttk.Button(startup,text="Index New Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text="Edit Tray",command=self.Edit_Tray,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=2,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Xtal_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky=(N,E,S,W))
         self.root.mainloop()
 
@@ -242,6 +245,7 @@ class CrystalDex_main:
         ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky=(N,E,W))
         helptext = "This program functions by accessing Box and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
         ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky=(N,E,W))
+        self.refocus()
 
     def New_Tray(self):
         self.clear_widgets()
@@ -328,40 +332,47 @@ class CrystalDex_main:
 
         for child in new_tray_frame.winfo_children():
             child.grid_configure(padx=5,pady=5)
+        self.refocus()
 
     def Select_Tray(self,short_title=None):
         self.clear_widgets()
         self.add_menu()
         self.root.geometry()
-        select_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        select_tray_frame.grid(column=0,row=0,sticky=(N,W))
+        st_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        st_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
-        select_tray_name_label = ttk.Label(select_tray_frame,text=(
+        st_name_label = ttk.Label(st_frame,text=(
             'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
             '\nPlease review the following to ensure no duplicate trays are indexed!'
         ))
-        select_tray_name_label.grid(column=0,row=0)
+        st_name_label.grid(column=0,row=0)
         tray_name = StringVar()
-        select_tray_name_combobox = ttk.Combobox(select_tray_frame,values=self.tray_names.keys(),textvariable=tray_name)
-        select_tray_name_combobox.grid(column=0,row=1)
+        st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()))
+        st_name_combobox.grid(column=0,row=1)
 
         if not self.harvesting:
-            none_of_the_above_label = ttk.Label(select_tray_frame,text='If none of the above match your tray, click here:')
+            none_of_the_above_label = ttk.Label(st_frame,text='If none of the above match your tray, click here:')
             none_of_the_above_label.grid(column=0,row=2)
-            ttk.Button(select_tray_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
+            ttk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
 
         def make_new_tray(short_title):
+            shorter_title = short_title
+            suffix = 1
+            all_titles = [ws.title for ws in self.wb]
+
+            # Make sure the title is unique
+            while shorter_title in all_titles:
+                shorter_title = f"{short_title[:24]}_{suffix}"
+                suffix += 1
+
             new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
-            new_worksheet.title = short_title
-            #This proceed thing is wrong. It needs to instead copy what is done after a normal tray is made...
-            self.proceed(self.wb[short_title])
+            new_worksheet.title = shorter_title
+            self.proceed(self.wb[shorter_title])
 
-        ttk.Button(select_tray_frame,text="Save selection and proceed",
-        command=lambda: print_error(self.tray_names.get(tray_name.get()))).grid(column=0,row=3)#self.proceed(self.wb[self.tray_names.get(tray_name.get())])
-
-        def print_error(value):
-            print(f'self.tray_names.get(tray_name.get()): {value}')
+        ttk.Button(st_frame,text="Save selection and proceed",
+        command=lambda: self.proceed(self.wb[self.tray_names.get(tray_name.get())])).grid(column=0,row=3)
+        self.refocus()
 
     def proceed(self,ws):
         date_set = ws['D1'].value
@@ -373,11 +384,7 @@ class CrystalDex_main:
         target_protein_bottom_left_stock_concentration = ws['H3'].value
         custom_tags_values = ws['D5'].value
         self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
-
-    def Edit_Tray(self):
-        self.clear_widgets()
-        self.add_menu()
-        edit_tray_frame = ttk.Frame(self.root, padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
+        self.refocus()
 
     def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         indexable = False
@@ -407,18 +414,13 @@ class CrystalDex_main:
             for ws in self.wb:
                 tags_cell = str(ws['K1'].value or "")
                 tags = [tag.strip() for tag in tags_cell.split(', ')]
-                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
+                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone]):
+                    self.tray_names[str(ws['A1'].value)] = ws.title
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
-                for ws in self.wb:
-                    tags_cell = str(ws['K1'].value or "")
-                    tags = [tag.strip() for tag in tags_cell.split(', ')]
-                    self.tray_names.clear()
-                    if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration]):
-                        self.tray_names[ws['A1'].value] = ws.title
                 full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
-                self.Select_Tray(short_title)    
+                self.Select_Tray(short_title)
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")#change this to a Tkinter messagebox or the splash screen
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
@@ -438,6 +440,7 @@ class CrystalDex_main:
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
                 self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+        self.refocus()
 
     def identify_subwell(self,ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
         self.clear_widgets()
@@ -697,9 +700,25 @@ class CrystalDex_main:
         poll_mouse()
 
     def Harvest_Crystals(self):
+        """This function must generate a Crystal Sendoff Sheet with:
+        All the previous data from the Crystal Sendoff Sheet in Box (doesn't exist officially yet)
+        for each crystal vial:
+            vial number (This should always go in the same cell. The first vial does not exist (it's the URL pin). The user must enter it in, and it must check to make sure that the cell is empty before filling it)
+            full protein name and picture link (exact cell copy from one sheet to another)
+            condition (pulled from the crystal screen library)
+            shape (pulled directly from CrystalDex_Library)
+            minor axis (same as previous)
+            major axis (same as previous)
+            harvester (requested of user)
+            date set (pulled from CrystalDex_Library)
+            date harvested (same as previous)
+            Notes (same as previous)
+            Leave 2 empty columns for the storage location and eventually the port number (no action required)
+        """
+
         self.harvesting = True
         for ws in self.wb:
-            self.tray_names[ws['A1'].value] = [ws.title]
+            self.tray_names[str(ws['A1'].value)] = ws.title
         self.Select_Tray()
 
     def Upload_Xtal_Screen(self):
