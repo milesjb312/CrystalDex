@@ -3,7 +3,7 @@ CrystalDex is an application for making manual crystal tray checking easier to t
 Note that this software currently works only with the screensize of the Moody Lab microscope computer.
 
 Functional goals of this program:
-    1) To make it easy to put both pictures and descriptions of every crystal we find immediately into Box without having to open up Box and copy things to the Excel sheet that noramlly requires very repetitive data entry (and in which we often miss things).
+    1) To make it easy to put both pictures and descriptions of every crystal we find immediately into Box without having to open up Box and copy things to the Excel sheet that normally requires very repetitive data entry (and in which we often miss things).
         - This will be accomplished by using the Box SDK with Python to access Box and by creating a Tkinter GUI that is easy to interact with. The GUI will contain reference fields to 
         be filled out and buttons for operating the microscope in an integrated fashion. It may also contain other operations as described in Goal 2.
     2) To incorporate the information from all the previous experimental steps into a single place so that we can track easily (and with less tedium) how our experiments are going.
@@ -18,11 +18,11 @@ Currently, CrystalDex does the following:
         - Requesting information about the protein construct, crystallization screen, and date, and creating a new Excel worksheet within a workbook that contains all virtual crystal trays previously indexed.
         - Automatically opening the SeBaView software to allow the user to see the camera image.
         - Requesting information about the well and sub well currently focused.
-        - Automatically saving the image with a conserved naming system.
-        - Updating the entire workbook into Box.
+        - Allows the user to size the crystal using a click-and-drag sizing tool.
+        - Automatically saving the image with a conserved naming system and putting the information into a virtual tray along with a link to the picture.
+        - Updating the entire workbook and all images into Box.
 
 In the near future, CrystalDex will:
-    1) Improve indexing trays by:
-        - Allowing users to click-and-drag a sizing tool to measure crystals in a repeatable and consistent manner.
-        - Uploading each picture taken directly into Box
-        - Creating and posting a link from Box to each picture inside of the appropriate Excel virtual tray.
+    1) Improve harvesting crystals by:
+        - Automatically filling out the Crystal Sendoff sheet with all pertinent data.
+    2) Allow users to upload crystallization screens or optimization conditions.
