@@ -91,8 +91,20 @@ class CrystalDex_main:
         #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
         with open("CrystalDex_Library.xlsx","wb") as c:
             c.write(file_download)
-        self.wb = load_workbook(filename=os.path.abspath("CrystalDex_Library.xlsx")) #Accesses the excel workbook using the openpyxl python module
+        self.wb = load_workbook(filename=os.path.abspath("CrystalDex_Library.xlsx"))
         
+        #Access Crystal_Sendoff_Sheet:
+        file_download = None
+        try:
+            file_id = '1898979834553'
+            file_download = self.client.downloads.download_file(file_id).read()
+        except FileNotFoundError:
+            file_id = '1898987747956'
+            file_download = self.client.downloads.download_file(file_id).read()
+        with open('Crystal_Sendoff_Sheet.xlsx','wb') as s:
+            s.write(file_download)
+        self.sendoff_sheet = load_workbook(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+
         #Other frequently accessed values (will be turned into a .json soon):
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
@@ -197,11 +209,10 @@ class CrystalDex_main:
                 self.SeBaView_wrapper.set_focus()
                 for i in range(2):
                     self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
-                    self.SeBaView_wrapper.minimize()
+                self.SeBaView_wrapper.minimize()
             except Exception as e:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
-        self.refocus()
 
     def close_SeBaView_and_root(self):
         try:
@@ -222,7 +233,9 @@ class CrystalDex_main:
         ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Xtal_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky=(N,E,S,W))
-        self.root.mainloop()
+        for i in range(2):
+            self.refocus()
+        self.root.mainloop() #This has to be the last line of code in the startup function.
 
     def add_menu(self):
         menu = Menu(self.root)
@@ -498,7 +511,7 @@ class CrystalDex_main:
         number_of_crystals_entry = ttk.Spinbox(subwell_frame,from_=0,to=100,textvariable=number_of_crystals_var)
         number_of_crystals_entry.grid(column=2,row=7)
 
-        shape_label = ttk.Label(subwell_frame,text='Shape of crystals (optional):')
+        shape_label = ttk.Label(subwell_frame,text='Shape of crystals:')
         shape_label.grid(column=1,row=8)
         shape_var = StringVar()
         shape_entry = ttk.Entry(subwell_frame,textvariable=shape_var)
@@ -527,17 +540,26 @@ class CrystalDex_main:
         now = datetime.now()
         date_snapped = now.strftime('%m-%d-%Y')
 
+        x = 0
+        if self.harvesting:
+            x = 1
+            harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
+            harvester_label.grid(column=1,row=13)
+            harvester_var = None
+            harvester_entry = ttk.Entry(subwell_frame,StringVar=harvester_var)
+            harvester_entry.grid(column=2,row=13)
+
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
-        notes_label.grid(column=1,row=15)
-        notes = Text(subwell_frame, width = 30, height = 10)
-        notes.grid(column=1,row=16)
+        notes_label.grid(column=1,row=13+x)
+        notes = Text(subwell_frame, width = 50, height = 5)
+        notes.grid(column=1,row=14+x,columnspan=2)
 
         def update_crystal_size_vars():
             crystal_width_var.set(f'{self.crystal_size[0]}')
             crystal_height_var.set(f'{self.crystal_size [1]}')
 
         ttk.Button(subwell_frame,text ='Measure Crystal',
-                   command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=13)
+                   command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
         
         ttk.Button(subwell_frame,text="Take and Save Picture",
                 command=lambda: self.take_picture(
@@ -557,13 +579,13 @@ class CrystalDex_main:
                      date_set,
                      date_snapped,
                      notes.get(1.0,END)
-                )).grid(column=1,row=14)
+                )).grid(column=1,row=16+x)
 
-        ttk.Button(subwell_frame,text="Done",
-                   command=lambda: self.Box_Save()).grid(column=2,row=16)
+        ttk.Button(subwell_frame,text="Done with this tray",
+                   command=lambda: self.Box_Save()).grid(column=1,row=17+x)
         
         for child in subwell_frame.winfo_children():
-            child.grid_configure(padx=5,pady=15)
+            child.grid_configure(padx=5,pady=10)
         self.refocus()
 
     def monitor_mouse(self):
@@ -717,9 +739,15 @@ class CrystalDex_main:
         """
 
         self.harvesting = True
+        x = 0
         for ws in self.wb:
+            x += 1
             self.tray_names[str(ws['A1'].value)] = ws.title
-        self.Select_Tray()
+        if x>1:
+            self.Select_Tray()
+        else:
+            print(f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
+            self.startup()
 
     def Upload_Xtal_Screen(self):
         self.clear_widgets()
