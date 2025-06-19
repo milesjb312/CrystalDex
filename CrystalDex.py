@@ -37,6 +37,9 @@ import pyautogui
 from pynput import mouse
 import pywinauto.keyboard
 
+#Crystallization screen imports:
+import pdfplumber
+
 #Packaging stuff:
 #https://realpython.com/pyinstaller-python/
 
@@ -103,7 +106,8 @@ class CrystalDex_main:
             file_download = self.client.downloads.download_file(file_id).read()
         with open('Crystal_Sendoff_Sheet.xlsx','wb') as s:
             s.write(file_download)
-        self.sendoff_sheet = load_workbook(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+        self.sendoff_workbook = load_workbook(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+        self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
         #Other frequently accessed values (will be turned into a .json soon):
         self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
@@ -165,6 +169,12 @@ class CrystalDex_main:
                     cell_id = self.picture_upload_filenames.get(image_filename)[1]
                     ws[cell_id].hyperlink = shared_link_url
                     self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+                    if 'harvested' in image_filename:
+                        for x in range(2,300):
+                            cell_id = f'B{x}'
+                            if self.sendoff_sheet[cell_id] == image_filename:
+                                self.sendoff_sheet[cell_id].hyperlink = shared_link_url
+                    self.sendoff_workbook.save(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
 
         #The following command uploads the Crystal Trays Library
         self.client.uploads.upload_file_version(
@@ -176,8 +186,14 @@ class CrystalDex_main:
                 )
             )
         if self.harvesting:
-            #The following lines will upload the Crystal Sendoff Sheet.
-            pass
+            self.client.uploads.upload_file_version(
+            attributes=box_sdk_gen.UploadFileAttributesParentField(
+                name="Crystal_Sendoff_Sheet.xlsx",
+                id="320928486478"),
+                file_id="1898979834553",
+                file=open(os.path.abspath("Crystal_Sendoff_Sheet.xlsx"),"rb"
+                )
+            )
 
         self.startup()
     
@@ -196,7 +212,7 @@ class CrystalDex_main:
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             self.SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(6)
+            time.sleep(4)
             #for i, w in enumerate(self.SeBaView.windows()):
             #    print(f'[{i}] Title: {w.window_text()}')
             try:
@@ -207,6 +223,7 @@ class CrystalDex_main:
                 self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
                 self.SeBaView_wrapper.maximize()
                 self.SeBaView_wrapper.set_focus()
+                time.sleep(0.1)
                 for i in range(2):
                     self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
                 self.SeBaView_wrapper.minimize()
@@ -232,7 +249,7 @@ class CrystalDex_main:
         #https://tkdocs.com/tutorial/text.html#basics
         ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Xtal_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         for i in range(2):
             self.refocus()
         self.root.mainloop() #This has to be the last line of code in the startup function.
@@ -542,12 +559,26 @@ class CrystalDex_main:
 
         x = 0
         if self.harvesting:
-            x = 1
+            x = 2
             harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
             harvester_label.grid(column=1,row=13)
-            harvester_var = None
-            harvester_entry = ttk.Entry(subwell_frame,StringVar=harvester_var)
+            harvester_var = StringVar()
+            harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester_var)
             harvester_entry.grid(column=2,row=13)
+
+            suggested_vial = '0'
+            vials_available = []
+            for y in range(2,301):
+                cell_id = f'B{y}'
+                if suggested_vial == '0' and self.sendoff_sheet[cell_id].value == None:
+                    suggested_vial = str(y)
+                elif suggested_vial != '0' and self.sendoff_sheet[f'A{y}'].value == None:
+                    vials_available.append(str(y))
+            vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
+            vial_label.grid(column=1,row=14)
+            vial_var = StringVar()
+            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial_var,values=vials_available)
+            vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
         notes_label.grid(column=1,row=13+x)
@@ -560,26 +591,49 @@ class CrystalDex_main:
 
         ttk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
-        
-        ttk.Button(subwell_frame,text="Take and Save Picture",
-                command=lambda: self.take_picture(
-                     ws,
-                     crystallization_chaperone,
-                     target_protein,
-                     crystal_screen,
-                     str(well_column_var.get()),
-                     str(well_row_var.get()),
-                     str(subwell_var.get()),
-                     str(number_of_crystals_var.get()),
-                     str(shape_var.get()),
-                     bool(possible_salt_crystals_var.get()),
-                     bool(precipitation_var.get()),
-                     bool(microcrystals_var.get()),
-                     bool(glassy_protein_or_artifacts_var.get()),
-                     date_set,
-                     date_snapped,
-                     notes.get(1.0,END)
-                )).grid(column=1,row=16+x)
+
+        if self.harvesting:
+            ttk.Button(subwell_frame,text='Harvest crystal',
+                    command=lambda: self.take_picture(
+                        ws,
+                        crystallization_chaperone,
+                        target_protein,
+                        crystal_screen,
+                        str(well_column_var.get()),
+                        str(well_row_var.get()),
+                        str(subwell_var.get()),
+                        str(number_of_crystals_var.get()),
+                        str(shape_var.get()),
+                        bool(possible_salt_crystals_var.get()),
+                        bool(precipitation_var.get()),
+                        bool(microcrystals_var.get()),
+                        bool(glassy_protein_or_artifacts_var.get()),
+                        date_set,
+                        date_snapped,
+                        notes.get(1.0,END),
+                        vial=str(vial_var.get()),
+                        harvester = str(harvester_var.get())
+                    )).grid(column=1,row=16+x)
+        else:
+            ttk.Button(subwell_frame,text='Take and save picture',
+                    command=lambda: self.take_picture(
+                        ws,
+                        crystallization_chaperone,
+                        target_protein,
+                        crystal_screen,
+                        str(well_column_var.get()),
+                        str(well_row_var.get()),
+                        str(subwell_var.get()),
+                        str(number_of_crystals_var.get()),
+                        str(shape_var.get()),
+                        bool(possible_salt_crystals_var.get()),
+                        bool(precipitation_var.get()),
+                        bool(microcrystals_var.get()),
+                        bool(glassy_protein_or_artifacts_var.get()),
+                        date_set,
+                        date_snapped,
+                        notes.get(1.0,END)
+                    )).grid(column=1,row=16+x)
 
         ttk.Button(subwell_frame,text="Done with this tray",
                    command=lambda: self.Box_Save()).grid(column=1,row=17+x)
@@ -616,21 +670,21 @@ class CrystalDex_main:
             glassy_protein_or_artifacts,
             date_set,
             date_snapped,
-            notes):
-        if self.harvesting == False or self.crystal_size[1] != 0:
-            image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
+            notes,
+            vial=None,
+            harvester=None):
+        
+        image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
+        if self.harvesting:
+            image_title = image_title+'_harvested'
+
+        def take_take_picture():
             self.SeBaView_wrapper.set_focus()
             self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
             time.sleep(3)
-            #The following two lines of code are to enable me to see where I need to program a mouse click to get the images to always save to the right spot.
-            #while self.button_location is None:
-            #    self.monitor_mouse(self.SeBaView_wrapper_rect)
             for i in range(2):
                 self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-            #time.sleep(2)#sleep to let the file settle so the next command will be able to grab and move it
-
-            #This needs to be updated, and the Mastercopy needs to be edited as well to fill in all the necessary information.
             well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
             row = well_to_excel_dict.get(well_row)
             column = well_to_excel_dict.get(well_column)
@@ -667,8 +721,27 @@ class CrystalDex_main:
 
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
-        else:
-            messagebox(Text="You haven't measured your crystal, silly!")
+            
+        if self.harvesting == False:
+            take_take_picture()
+        elif self.harvesting:
+            if self.crystal_size[1] != 0:
+                take_take_picture()
+                cell_id = f'B{vial}'
+                crystal_cell = self.sendoff_sheet[cell_id]
+                crystal_cell.value = image_title
+                #not sure how to do link, has something to do with the Box_save function...
+                crystal_cell.offset(row=0,column=1).value = 'condition undetermined...'
+                crystal_cell.offset(row=0,column=2).value = f'shape'
+                crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                crystal_cell.offset(row=0,column=5).value = harvester
+                crystal_cell.offset(row=0,column=6).value = f'{date_set}, {date_snapped}' #date_set and date_harvested are passed from identify_subwell 
+                crystal_cell.offset(row=0,column=7).value = notes
+                self.sendoff_workbook.save(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+            else:
+                messagebox(Text="You haven't measured your crystal, silly!")
+
         self.refocus()
 
     def measure_crystal(self,function_to_run):
@@ -722,22 +795,6 @@ class CrystalDex_main:
         poll_mouse()
 
     def Harvest_Crystals(self):
-        """This function must generate a Crystal Sendoff Sheet with:
-        All the previous data from the Crystal Sendoff Sheet in Box (doesn't exist officially yet)
-        for each crystal vial:
-            vial number (This should always go in the same cell. The first vial does not exist (it's the URL pin). The user must enter it in, and it must check to make sure that the cell is empty before filling it)
-            full protein name and picture link (exact cell copy from one sheet to another)
-            condition (pulled from the crystal screen library)
-            shape (pulled directly from CrystalDex_Library)
-            minor axis (same as previous)
-            major axis (same as previous)
-            harvester (requested of user)
-            date set (pulled from CrystalDex_Library)
-            date harvested (same as previous)
-            Notes (same as previous)
-            Leave 2 empty columns for the storage location and eventually the port number (no action required)
-        """
-
         self.harvesting = True
         x = 0
         for ws in self.wb:
@@ -749,10 +806,54 @@ class CrystalDex_main:
             print(f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
             self.startup()
 
-    def Upload_Xtal_Screen(self):
+    def Upload_Crystal_Screen(self):
+        #This needs some work because the PDFs are messy. We also need to be able to upload from Make Tray (Hampton)
         self.clear_widgets()
         self.add_menu()
-        upload_xtal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12").grid(column=0,row=0,sticky=(N,W,E,S))
+        upload_crystal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        upload_crystal_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+        
+        crystal_screen_name_label = ttk.Label(upload_crystal_screen_frame,text='Enter the name of the new crystallization screen:')
+        crystal_screen_name_label.grid(row=0,column=0)
+        crystal_screen_name = StringVar()
+        crystal_screen_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_name)
+        crystal_screen_entry.grid(row=0,column=1)
+        ttk.Button(upload_crystal_screen_frame,text="Upload crystallization screen",
+            command=lambda: scrape_crystal_screen_data()).grid(column=1,row=13,sticky=(N,W))
+
+        def scrape_crystal_screen_data():
+            conditions = {}
+            crystal_screen_path = filedialog.askopenfilename(
+                    title="Select the pdf containing the crystal screen conditions",
+                    filetypes=[('PDF files',"*.pdf")]
+                )
+            text = ""
+            with pdfplumber.open(crystal_screen_path) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() + "\n"
+
+            for condition in range(1,97):
+                next_condition = str(condition+1)
+                reading = False
+                for line in text.splitlines():
+                    if line.startswith(f'{condition}.'):
+                        line = line.strip()
+                        if any(keyword in line.lower() for keyword in ['ph','%']):
+                            conditions[str(condition)] = line
+                            reading = True
+                    else:
+                        if reading and not line.startswith(f'{next_condition}.'):
+                            conditions[str(condition)] += ' ' + line
+                        elif reading and line.startswith(f'{next_condition}.'):
+                            reading = False
+                            condition = next_condition
+
+            for number,description in conditions.items():
+                print(f'{number}: {description}')
+
+            #with open("Crystallization_Screens.json", "w") as c:
+            #    json.dump({crystal_screen_name: crystal_screen_path}, c)
+
 
 if __name__ == "__main__":
     app = CrystalDex_main()
