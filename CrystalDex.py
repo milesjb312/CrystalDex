@@ -37,7 +37,7 @@ import pyautogui
 from pynput import mouse
 import pywinauto.keyboard
 
-#Crystallization screen imports:
+#Crystal screen imports:
 import pdfplumber
 
 #Packaging stuff:
@@ -110,14 +110,17 @@ class CrystalDex_main:
         self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
         #Other frequently accessed values (will be turned into a .json soon):
-        self.crystallization_chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
-        self.crystal_screen_values = ["Crystal_Screen","Index","PEG_Custom","PEG_Ion","Salt_Rx","Wizard"]
-        self.crystal_screen_symbols = {'Crystal_Screen':'CS',
-                                       'Index':'IN',
-                                       'PEG_Custom':'PC',
-                                       'PEG_Ion':'PI',
-                                       'Salt_Rx':'SR',
-                                       'Wizard':'WI'}
+        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+        self.crystal_screen_values = []
+        self.crystal_screen_symbols = {}
+        if os.path.exists("Crystal_Screens.json"):
+            with open("Crystal_Screens.json", "r") as s:
+                crystal_screens = json.load(s)
+                for crystal_screen in crystal_screens.keys():
+                    self.crystal_screen_values.append(crystal_screen.split('__')[0])
+                    self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
+        else:
+            pass
         self.tray_names = {}
 
         self.crystal_size = [0,0]
@@ -249,7 +252,7 @@ class CrystalDex_main:
         #https://tkdocs.com/tutorial/text.html#basics
         ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text="Upload Crystallization Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         for i in range(2):
             self.refocus()
         self.root.mainloop() #This has to be the last line of code in the startup function.
@@ -299,11 +302,11 @@ class CrystalDex_main:
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
         date_set_drop_down.grid(column=2,row=5)
 
-        crystallization_chaperone_label = ttk.Label(new_tray_frame,text="Crystallization Chaperone (optional):")
-        crystallization_chaperone_label.grid(column=1,row=6,sticky=(N,W))
-        crystallization_chaperone_var = StringVar()
-        crystallization_chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystallization_chaperone_var,values=self.crystallization_chaperone_values)
-        crystallization_chaperone_drop_down.grid(column=2,row=6)
+        chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
+        chaperone_label.grid(column=1,row=6,sticky=(N,W))
+        chaperone_var = StringVar()
+        chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=chaperone_var,values=self.chaperone_values)
+        chaperone_drop_down.grid(column=2,row=6)
 
         crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
         crystal_screen_label.grid(column=1,row=7,sticky=(N,W))
@@ -355,7 +358,7 @@ class CrystalDex_main:
                        str(target_protein_top_left_stock_concentration_var.get()),
                        str(target_protein_top_right_stock_concentration_var.get()),
                        str(target_protein_bottom_left_stock_concentration_var.get()),
-                       str(crystallization_chaperone_var.get()),
+                       str(chaperone_var.get()),
                        str(custom_tags_var.get())
                         )
                     ).grid(column=1,row=13,sticky=(N,W))
@@ -406,17 +409,17 @@ class CrystalDex_main:
 
     def proceed(self,ws):
         date_set = ws['D1'].value
-        crystallization_chaperone = ws['D2'].value
+        chaperone = ws['D2'].value
         crystal_screen = ws['D3'].value
         target_protein = ws['D4'].value
         target_protein_top_left_stock_concentration = ws['H1'].value
         target_protein_top_right_stock_concentration = ws['H2'].value
         target_protein_bottom_left_stock_concentration = ws['H3'].value
         custom_tags_values = ws['D5'].value
-        self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+        self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.refocus()
 
-    def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
+    def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values):
         indexable = False
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
@@ -444,7 +447,7 @@ class CrystalDex_main:
             for ws in self.wb:
                 tags_cell = str(ws['K1'].value or "")
                 tags = [tag.strip() for tag in tags_cell.split(', ')]
-                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone]):
+                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone]):
                     self.tray_names[str(ws['A1'].value)] = ws.title
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
@@ -457,11 +460,11 @@ class CrystalDex_main:
                 full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
                 new_worksheet.title = short_title
-                all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values]
+                all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values]
                 new_worksheet['A1'] = full_title
                 new_worksheet['K1'] = ', '.join(map(str,all_tags))
                 new_worksheet['D1'] = date_set
-                new_worksheet['D2'] = crystallization_chaperone
+                new_worksheet['D2'] = chaperone
                 new_worksheet['D3'] = crystal_screen
                 new_worksheet['D4'] = target_protein
                 new_worksheet['D5'] = custom_tags_values
@@ -469,10 +472,10 @@ class CrystalDex_main:
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
-                self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values)
+                self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.refocus()
 
-    def identify_subwell(self,ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,crystallization_chaperone,custom_tags_values):
+    def identify_subwell(self,ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values):
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
@@ -596,7 +599,7 @@ class CrystalDex_main:
             ttk.Button(subwell_frame,text='Harvest crystal',
                     command=lambda: self.take_picture(
                         ws,
-                        crystallization_chaperone,
+                        chaperone,
                         target_protein,
                         crystal_screen,
                         str(well_column_var.get()),
@@ -618,7 +621,7 @@ class CrystalDex_main:
             ttk.Button(subwell_frame,text='Take and save picture',
                     command=lambda: self.take_picture(
                         ws,
-                        crystallization_chaperone,
+                        chaperone,
                         target_protein,
                         crystal_screen,
                         str(well_column_var.get()),
@@ -656,7 +659,7 @@ class CrystalDex_main:
     def take_picture(
             self,
             ws,
-            crystallization_chaperone,
+            chaperone,
             target_protein,
             crystal_screen,
             well_column,
@@ -674,7 +677,7 @@ class CrystalDex_main:
             vial=None,
             harvester=None):
         
-        image_title = f'{crystallization_chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
+        image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
         if self.harvesting:
             image_title = image_title+'_harvested'
 
@@ -808,21 +811,35 @@ class CrystalDex_main:
 
     def Upload_Crystal_Screen(self):
         #This needs some work because the PDFs are messy. We also need to be able to upload from Make Tray (Hampton)
+        #There also needs to be a method for selecting a two-letter name for your screen
+        crystal_screens = {}
+        if os.path.exists("Crystal_Screens.json"):
+            with open("Crystal_Screens.json", "r") as s:
+                crystal_screens = json.load(s)
+                print(crystal_screens)
+
         self.clear_widgets()
         self.add_menu()
         upload_crystal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         upload_crystal_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
         
-        crystal_screen_name_label = ttk.Label(upload_crystal_screen_frame,text='Enter the name of the new crystallization screen:')
+        crystal_screen_name_label = ttk.Label(upload_crystal_screen_frame,text='Enter the name of the new crystal screen:')
         crystal_screen_name_label.grid(row=0,column=0)
         crystal_screen_name = StringVar()
         crystal_screen_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_name)
         crystal_screen_entry.grid(row=0,column=1)
-        ttk.Button(upload_crystal_screen_frame,text="Upload crystallization screen",
-            command=lambda: scrape_crystal_screen_data()).grid(column=2,row=0,sticky=(N,W))
 
+        crystal_screen_symbol_label = ttk.Label(upload_crystal_screen_frame,text='Enter 2-letter symbol for new screen:')
+        crystal_screen_symbol_label.grid(row=0,column=2)
+        crystal_screen_symbol = StringVar()
+        crystal_screen_symbol_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_symbol)
+        crystal_screen_symbol_entry.grid(row=0,column=3)
+
+        ttk.Button(upload_crystal_screen_frame,text="Upload crystal screen",
+            command=lambda: scrape_crystal_screen_data()).grid(column=4,row=0,sticky=(N,W))
+
+        conditions = ['' for _ in range(96)]
         def scrape_crystal_screen_data():
-            conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
                     title="Select the pdf containing the crystal screen conditions",
                     filetypes=[('PDF files',"*.pdf")]
@@ -832,26 +849,30 @@ class CrystalDex_main:
                 for page in pdf.pages:
                     text += page.extract_text() + "\n"
 
-            for condition in range(1,97):
-                next_condition = str(condition+1)
+            last_condition = 1
+            for condition in range(95):
+                if conditions[condition].strip():
+                    last_condition = condition+1
+
+            for condition in range(last_condition,97):
+                next_condition = str(condition-last_condition+2)
                 reading = False
                 for line in text.splitlines():
-                    if line.startswith(f'{condition}.'):
+                    if line.startswith(f'{condition-last_condition+1}.'):
                         line = line.strip()
                         if (any(keyword in line.lower() for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium'])) or all(keyword in line.lower() for keyword in ['ph',' m ']):
-                            conditions[str(condition)] = line
+                            conditions[condition-1] = line
                             reading = True
-                    else:
-                        if reading and not line.startswith(f'{next_condition}.'):
+                    elif reading and not line.startswith(f'{next_condition}.'):
                             if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                                conditions[str(condition)] += ' ' + line
-                        elif reading and line.startswith(f'{next_condition}.'):
-                            reading = False
-                            condition = next_condition
+                                conditions[condition-1] += ' ' + line
+                    elif reading and line.startswith(f'{next_condition}.'):
+                        reading = False
+                        #condition = int(next_condition)
 
             listbox_label = Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
-            listbox_values = [f"{cond}. {description}" for cond, description in conditions.items()]
+            listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
             condition_var = StringVar(value=listbox_values)
             conditions_listbox = Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
@@ -860,30 +881,38 @@ class CrystalDex_main:
             condition_entry = Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
             condition_entry.grid(row=4, column=0, columnspan=3)
 
+            selected_index = IntVar(value=-1)
+
             def show_condition(event):
                 selection = conditions_listbox.curselection()
                 if selection:
                     index = selection[0]
-                    edited_condition.set(listbox_values[index])
+                    selected_index.set(index)
+                    edited_condition.set(f'{conditions[index]}')
 
             conditions_listbox.bind('<<ListboxSelect>>',show_condition)
 
-            def save():
-                selection = conditions_listbox.curselection()
-                if selection:
-                    index = selection[0]
+            def overwrite():
+                index = selected_index.get()
+                print(f'index: {index}')
+                if index >= 0:
                     text = edited_condition.get()
-                    number = text.split('.')[0].strip()
-                    description = text[len(number)+ 1:].strip()
-                    conditions[number] = description
+                    condition = index
+                    conditions[condition] = text
                     conditions_listbox.delete(index)
-                    conditions_listbox.insert(index,f'{number}. {description}')
+                    conditions_listbox.insert(index, f'[{condition+1}]: {text}')
+                    selected_index.set(index+1)
+                    edited_condition.set(f'{conditions[index+1]}')
+                    
+            Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
-            Button(upload_crystal_screen_frame,text='Save',command=save).grid(row=4,column=3)
+            def save():
+                crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
+                with open("Crystal_Screens.json", "w") as c:
+                    json.dump(crystal_screens, c)
+                self.startup()
             
-            #with open("Crystallization_Screens.json", "w") as c:
-            #    json.dump({crystal_screen_name: crystal_screen_path}, c)
-
+            Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
 if __name__ == "__main__":
     app = CrystalDex_main()
