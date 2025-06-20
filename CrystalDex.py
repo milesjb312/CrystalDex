@@ -819,7 +819,7 @@ class CrystalDex_main:
         crystal_screen_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_name)
         crystal_screen_entry.grid(row=0,column=1)
         ttk.Button(upload_crystal_screen_frame,text="Upload crystallization screen",
-            command=lambda: scrape_crystal_screen_data()).grid(column=1,row=13,sticky=(N,W))
+            command=lambda: scrape_crystal_screen_data()).grid(column=2,row=0,sticky=(N,W))
 
         def scrape_crystal_screen_data():
             conditions = {}
@@ -838,19 +838,49 @@ class CrystalDex_main:
                 for line in text.splitlines():
                     if line.startswith(f'{condition}.'):
                         line = line.strip()
-                        if any(keyword in line.lower() for keyword in ['ph','%']):
+                        if (any(keyword in line.lower() for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium'])) or all(keyword in line.lower() for keyword in ['ph',' m ']):
                             conditions[str(condition)] = line
                             reading = True
                     else:
                         if reading and not line.startswith(f'{next_condition}.'):
-                            conditions[str(condition)] += ' ' + line
+                            if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
+                                conditions[str(condition)] += ' ' + line
                         elif reading and line.startswith(f'{next_condition}.'):
                             reading = False
                             condition = next_condition
 
-            for number,description in conditions.items():
-                print(f'{number}: {description}')
+            listbox_label = Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
+            listbox_label.grid(row=2,column=0)
+            listbox_values = [f"{cond}. {description}" for cond, description in conditions.items()]
+            condition_var = StringVar(value=listbox_values)
+            conditions_listbox = Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
+            conditions_listbox.grid(row=3,column=0,columnspan=3)
+            
+            edited_condition = StringVar()
+            condition_entry = Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
+            condition_entry.grid(row=4, column=0, columnspan=3)
 
+            def show_condition(event):
+                selection = conditions_listbox.curselection()
+                if selection:
+                    index = selection[0]
+                    edited_condition.set(listbox_values[index])
+
+            conditions_listbox.bind('<<ListboxSelect>>',show_condition)
+
+            def save():
+                selection = conditions_listbox.curselection()
+                if selection:
+                    index = selection[0]
+                    text = edited_condition.get()
+                    number = text.split('.')[0].strip()
+                    description = text[len(number)+ 1:].strip()
+                    conditions[number] = description
+                    conditions_listbox.delete(index)
+                    conditions_listbox.insert(index,f'{number}. {description}')
+            
+            Button(upload_crystal_screen_frame,text='Save',command=save).grid(row=4,column=3)
+            
             #with open("Crystallization_Screens.json", "w") as c:
             #    json.dump({crystal_screen_name: crystal_screen_path}, c)
 
