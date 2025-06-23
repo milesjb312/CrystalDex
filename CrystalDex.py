@@ -129,6 +129,7 @@ class CrystalDex_main:
         self.picture_upload_filenames = {}
         self.button_location = None
         self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
+        self.not_first = ''
 
         #Tkinter initializations
         root=Tk()
@@ -253,6 +254,8 @@ class CrystalDex_main:
         ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+
         for i in range(2):
             self.refocus()
         self.root.mainloop() #This has to be the last line of code in the startup function.
@@ -820,6 +823,7 @@ class CrystalDex_main:
 
         self.clear_widgets()
         self.add_menu()
+        self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
         upload_crystal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         upload_crystal_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
         
@@ -835,10 +839,12 @@ class CrystalDex_main:
         crystal_screen_symbol_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_symbol)
         crystal_screen_symbol_entry.grid(row=0,column=3)
 
-        ttk.Button(upload_crystal_screen_frame,text="Upload crystal screen",
-            command=lambda: scrape_crystal_screen_data()).grid(column=4,row=0,sticky=(N,W))
+        upload_crystal_screen_button = ttk.Button(upload_crystal_screen_frame,text=f"Upload {self.not_first}crystal screen",command=lambda: scrape_crystal_screen_data())
+        upload_crystal_screen_button.grid(column=4,row=0,sticky=(N,W))
+        upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
 
         conditions = ['' for _ in range(96)]
+
         def scrape_crystal_screen_data():
             crystal_screen_path = filedialog.askopenfilename(
                     title="Select the pdf containing the crystal screen conditions",
@@ -848,7 +854,11 @@ class CrystalDex_main:
             with pdfplumber.open(crystal_screen_path) as pdf:
                 for page in pdf.pages:
                     text += page.extract_text() + "\n"
-                    #PUT IN HERE some code to check and see if the text == None (because I believe Optimization in make tray only does charts), then read the charts and digest and fill the conditions.
+
+                if not any(keyword in text for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
+                    print(f"No text found. If you're trying to use Make Tray from Hampton, use the Optimization button on the home screen instead.")
+                #else:
+                #    upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
 
             last_condition = 1
             for condition in range(95):
@@ -869,7 +879,6 @@ class CrystalDex_main:
                                 conditions[condition-1] += ' ' + line
                     elif reading and line.startswith(f'{next_condition}.'):
                         reading = False
-                        #condition = int(next_condition)
 
             listbox_label = Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
@@ -914,6 +923,13 @@ class CrystalDex_main:
                 self.startup()
             
             Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
+
+    def Optimization_Screen(self):
+        if os.path.exists('Crystal_Screens.json'):
+            #have the user select a crystal screen from the list, then display the conditions in that screen
+            pass
+        else:
+            #have the user 
 
 if __name__ == "__main__":
     app = CrystalDex_main()
