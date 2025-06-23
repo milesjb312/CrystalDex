@@ -848,6 +848,7 @@ class CrystalDex_main:
             with pdfplumber.open(crystal_screen_path) as pdf:
                 for page in pdf.pages:
                     text += page.extract_text() + "\n"
+                    #PUT IN HERE some code to check and see if the text == None (because I believe Optimization in make tray only does charts), then read the charts and digest and fill the conditions.
 
             last_condition = 1
             for condition in range(95):
