@@ -925,11 +925,26 @@ class CrystalDex_main:
             Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
     def Optimization_Screen(self):
-        if os.path.exists('Crystal_Screens.json'):
-            #have the user select a crystal screen from the list, then display the conditions in that screen
-            pass
-        else:
-            #have the user 
+        self.clear_widgets()
+        self.add_menu()
+        optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+        
+        Label(text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=0,column=0)
+        optimization_screen_frame
+
+        def lookup_condition():
+            if os.path.exists('Crystal_Screens.json'):
+                with open("Crystal_Screens.json", "r") as s:
+                    crystal_screens = json.load(s)
+                    for crystal_screen in crystal_screens.keys():
+                        self.crystal_screen_values.append(crystal_screen.split('__')[0])
+                        self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]            
+                        crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
+                        crystal_screens_label.grid(row=2,column=0)
+                        condition_var = StringVar(value=self.crystal_screen_values)
+                        conditions_listbox = Listbox(optimization_screen_frame,listvariable=condition_var,height=25,width=150)
+                        conditions_listbox.grid(row=3,column=0,columnspan=3)
 
 if __name__ == "__main__":
     app = CrystalDex_main()
