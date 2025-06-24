@@ -254,7 +254,7 @@ class CrystalDex_main:
         ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
         ttk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
+        ttk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky=(N,E,S,W))
 
         for i in range(2):
             self.refocus()
@@ -746,7 +746,7 @@ class CrystalDex_main:
                 crystal_cell.offset(row=0,column=7).value = notes
                 self.sendoff_workbook.save(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
             else:
-                messagebox(Text="You haven't measured your crystal, silly!")
+                messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
 
         self.refocus()
 
@@ -927,18 +927,12 @@ class CrystalDex_main:
     def Optimization_Screen(self):
         self.clear_widgets()
         self.add_menu()
+        self.root.geometry(self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}'))
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
         
-        Label(text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=1,column=0)
-        Button(optimization_screen_frame,text='Look up condition from a screen in CrystalDex',command=lookup_condition).grid(row=0,column=0)
-        crystal_screen = None
-
-        conditions = []
-        conditions_var = StringVar(value=conditions)
-        selected_condition = StringVar()
-        conditions_listbox = Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
-        conditions_listbox.grid(row=9,column=0,columnspan=3)
+        self.crystal_screen = None
+        conditions = ['' for _ in range(96)]
         selected_index = IntVar(value=-1)
 
         def lookup_condition():
@@ -949,96 +943,121 @@ class CrystalDex_main:
                         self.crystal_screen_values.append(crystal_screen.split('__')[0])
                         self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
                 crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
-                crystal_screens_label.grid(row=2,column=0)
-                crystal_screen = StringVar(value=self.crystal_screen_values)
-                crystal_screens_listbox = Listbox(optimization_screen_frame,listvariable=crystal_screen,height=5,width=20)
-                crystal_screens_listbox.grid(row=3,column=0)
-                Button(optimization_screen_frame,text='Select crystal screen and continue',command=select_and_continue).grid(row=4,column=0)
+                crystal_screens_label.grid(row=1,column=0)
+                crystal_screen_var = StringVar(value=self.crystal_screen_values)
+                crystal_screens_listbox = Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
+                crystal_screens_listbox.grid(row=2,column=0)
+            else:
+                messagebox.showerror(title='No crystal screens',message=f'Your CrystalDex has no crystal screens! Upload at least one first to enable searching.')#Why doesn't this work now?
+
             def select_and_continue():
-                crystal_screen = crystal_screen.get()
+                lookup_conditions = []
+                with open("Crystal_Screens.json", "r") as s:
+                    crystal_screens = json.load(s)
+                    for crystal_screen in crystal_screens.keys():
+                        for condition in crystal_screens.get(crystal_screen):
+                            lookup_conditions.append(condition)
 
-        if crystal_screen is not None and selected_condition is None:
-            with open("Crystal_Screens.json", "r") as s:
-                crystal_screens = json.load(s)
-                for crystal_screen in crystal_screens.keys():
-                    for condition in crystal_screens[crystal_screen]:
-                        conditions.append(condition)
-            
-            def select_condition_to_optimize():
-                selection = conditions_listbox.curselection()
-                if selection:
-                    index = selection[0]
-                    selected_index.set(index)
-                    selected_condition.set(f'{conditions[index]}')
-                    conditions.clear()
+                lookup_conditions_var = StringVar(value=lookup_conditions)
+                self.crystal_screen = crystal_screen_var.get()
+                lookup_listbox = Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
+                lookup_listbox.grid(row=0,column=1,columnspan=4,rowspan=3)
 
-            conditions_listbox.bind('<<ListboxSelect>>',select_condition_to_optimize)
+                def select_condition_to_optimize(event):
+                    selection = lookup_listbox.curselection()
+                    if selection!=-1:
+                        index = selection[0]
+                        print(f'index: {index}')
+                        selected_index.set(index)
+                        self.selected_condition.set(f'{lookup_conditions[index]}')
+                        Label(optimization_screen_frame,text=f'Reference condition: {self.selected_condition.get()}').grid(row=4,column=0)
 
-        Label(optimization_screen_frame,text=f'Reference condition: {selected_condition}').grid(row=2,column=0)
-        Label(optimization_screen_frame,text='Please enter in the relevant information for each condition.').grid(row=6,column=0)
+                lookup_listbox.bind('<<ListboxSelect>>',select_condition_to_optimize)
 
-        Label(optimization_screen_frame,text='pH Start(leave empty if not tracked):').grid(row=7,column=0)
+            Button(optimization_screen_frame,text='Select crystal screen and continue',command=select_and_continue).grid(row=3,column=0)            
+
+        Button(optimization_screen_frame,text='Look up condition from a screen in CrystalDex',command=lookup_condition).grid(row=0,column=0)
+
+        Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=5,column=0,columnspan=5,sticky='N,W')
+        Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0)
+
+        Label(optimization_screen_frame,text='pH Start(leave empty if not tracked):').grid(row=8,column=0)
         pH_start_var = StringVar()
         pH_start_entry = Entry(optimization_screen_frame,textvariable=pH_start_var)
-        pH_start_entry.grid(row=7,column=1)
-        Label(optimization_screen_frame,text='pH Stop:').grid(row=7,column=2)
+        pH_start_entry.grid(row=8,column=1)
+        Label(optimization_screen_frame,text='pH Stop:').grid(row=8,column=2)
         pH_stop_var = StringVar()
         pH_stop_entry = Entry(optimization_screen_frame,textvariable=pH_stop_var)
-        pH_stop_entry.grid(row=7,column=3)
-        Label(optimization_screen_frame,text='pH Step:').grid(row=7,column=4)
+        pH_stop_entry.grid(row=8,column=3)
+        Label(optimization_screen_frame,text='pH Step (optional, default is 1):').grid(row=8,column=4)
         pH_step_var = StringVar()
         pH_step_entry = Entry(optimization_screen_frame,textvariable=pH_step_var)
-        pH_step_entry.grid(row=7,column=5)
+        pH_step_entry.grid(row=8,column=5)
 
-        Label(optimization_screen_frame,text='Condition:').grid(row=8,column=0)
+        Label(optimization_screen_frame,text='Condition:').grid(row=9,column=0)
         condition_var = StringVar()
         condition_entry = Entry(optimization_screen_frame,textvariable=condition_var)
-        condition_entry.grid(row=8,column=1)
-        Label(optimization_screen_frame,text='Condition Concentration Start:').grid(row=8,column=2)
+        condition_entry.grid(row=9,column=1)
+        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=9,column=2)
         condition_start_var = StringVar()
         condition_start_entry = Entry(optimization_screen_frame,textvariable=condition_start_var)
-        condition_start_entry.grid(row=8,column=3)
-        Label(optimization_screen_frame,text='Condition Concentration Stop:').grid(row=8,column=4)
+        condition_start_entry.grid(row=9,column=3)
+        Label(optimization_screen_frame,text='Condition Concentration Stop (non-inclusive):').grid(row=9,column=4)
         condition_stop_var = StringVar()
         condition_stop_entry = Entry(optimization_screen_frame,textvariable=condition_stop_var)
-        condition_stop_entry.grid(row=8,column=5)
-        Label(optimization_screen_frame,text='Condition Concentration Step:').grid(row=8,column=6)
+        condition_stop_entry.grid(row=9,column=5)
+        Label(optimization_screen_frame,text='Condition Concentration Step (required!):').grid(row=9,column=6)
         condition_step_var = StringVar()
         condition_step_entry = Entry(optimization_screen_frame,textvariable=condition_step_var)
-        condition_step_entry.grid(row=8,column=7)
+        condition_step_entry.grid(row=9,column=7)
 
         def save_condition_settings():
-            pH_start = None
+            pH_step = 1
+            pH_stop = 0
             if pH_start_var:
-                pH_start = pH_start_var.get()
+                pH_start = float(pH_start_var.get())
                 if pH_stop_var:
-                    pH_stop = pH_stop_var.get()
+                    pH_stop = float(pH_stop_var.get())
                     if pH_step_var:
-                        ph_step = pH_step_var.get()
-                    else:
-                        messagebox(f"Please enter a pH Step. This is the increments by which you'd like the pH to increase from the starting point up to the stop point.")
+                        ph_step = float(pH_step_var.get())
                 else:
-                    messagebox(f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at")
-                    #May have to put in some more code to break out of this function...
+                    messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
+            pH_steps = (pH_stop-pH_start)/pH_step
             if condition_var:
                 condition = condition_var.get()
                 if condition_start_var:
-                    condition_start = condition_start_var.get()
+                    condition_start = float(condition_start_var.get())
                     if condition_stop_var:
-                        condition_stop = condition_stop_var.get()
+                        condition_stop = float(condition_stop_var.get())
                         if condition_step_var:
-                            condition_step = condition_step_var.get()
-                            #Code to generate list of conditions....
-                            conditions.append()
+                            condition_step = float(condition_step_var.get())
+                            condition_steps = (condition_stop-condition_start)/condition_step
+                            if pH_steps == condition_steps:
+                                for new_condition_number in range(condition_steps):
+                                    new_condition_concentration = new_condition_number*condition_step+condition_start
+                                    new_pH = new_condition_number*pH_step+pH_start
+                                    new_condition = f'{new_condition_concentration} M {condition}, pH {new_pH}'
+                                    entered = False
+                                    if not entered:
+                                        for condition in conditions:
+                                            if condition == '':
+                                                conditions[condition] = f'{condition}. {new_condition}'
+                                                entered = True
                         else:
-                            messagebox(f"Please enter a Condition Concentration Step. This is the increment you'd like to increase your condition's concentration by.")
+                            messagebox.showerror(title='No Condition Concentration Step',message=f"Please enter a Condition Concentration Step. This is the increment you'd like to increase your condition's concentration by.")
                     else:
-                        messagebox(f"Please enter a Condition Concentration Stop. This is the final (highest) concentration you'd like to include in your optimization of this condition.")
+                        messagebox.showerror(title='No Condition Concentration Stop',message=f"Please enter a Condition Concentration Stop. This is the final (highest) concentration you'd like to include in your optimization of this condition.")
                 else:
-                    messagebox(f"Please enter a Condition Concentration Start. This is the initial (lowest) concentration you'd like to include in your optimization of this condition.")
-
+                    messagebox.showerror(title='No Condition Concentration Start',message=f"Please enter a Condition Concentration Start. This is the initial (lowest) concentration you'd like to include in your optimization of this condition.")
             else:
-                messagebox(f"Please enter a condition to begin generating a list of optimizations")
+                messagebox.showerror(title='No Condition selected',message=f"Please enter a condition to begin generating a list of optimizations")
+
+        Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
+
+        conditions_var = StringVar(value=conditions)
+        self.selected_condition = StringVar()
+        conditions_listbox = Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
+        conditions_listbox.grid(row=12,column=0,columnspan=3)
 
 if __name__ == "__main__":
     app = CrystalDex_main()
