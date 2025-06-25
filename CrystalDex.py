@@ -979,7 +979,7 @@ class CrystalDex_main:
         Button(optimization_screen_frame,text='Look up condition from a screen in CrystalDex',command=lookup_condition).grid(row=0,column=0)
 
         Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=5,column=0,columnspan=5,sticky='N,W')
-        Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0)
+        Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0,columnspan=5,sticky='N,W')
 
         Label(optimization_screen_frame,text='pH Start(leave empty if not tracked):').grid(row=8,column=0)
         pH_start_var = StringVar()
@@ -994,22 +994,73 @@ class CrystalDex_main:
         pH_step_entry = Entry(optimization_screen_frame,textvariable=pH_step_var)
         pH_step_entry.grid(row=8,column=5)
 
-        Label(optimization_screen_frame,text='Condition:').grid(row=9,column=0)
-        condition_var = StringVar()
-        condition_entry = Entry(optimization_screen_frame,textvariable=condition_var)
-        condition_entry.grid(row=9,column=1)
+        Label(optimization_screen_frame,text='Condition 1:').grid(row=9,column=0)
+        condition1_var = StringVar()
+        condition1_entry = Entry(optimization_screen_frame,textvariable=condition1_var)
+        condition1_entry.grid(row=9,column=1)
         Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=9,column=2)
-        condition_start_var = StringVar()
-        condition_start_entry = Entry(optimization_screen_frame,textvariable=condition_start_var)
-        condition_start_entry.grid(row=9,column=3)
+        condition1_start_var = StringVar()
+        condition1_start_entry = Entry(optimization_screen_frame,textvariable=condition1_start_var)
+        condition1_start_entry.grid(row=9,column=3)
         Label(optimization_screen_frame,text='Condition Concentration Stop (non-inclusive):').grid(row=9,column=4)
-        condition_stop_var = StringVar()
-        condition_stop_entry = Entry(optimization_screen_frame,textvariable=condition_stop_var)
-        condition_stop_entry.grid(row=9,column=5)
+        condition1_stop_var = StringVar()
+        condition1_stop_entry = Entry(optimization_screen_frame,textvariable=condition1_stop_var)
+        condition1_stop_entry.grid(row=9,column=5)
         Label(optimization_screen_frame,text='Condition Concentration Step (required!):').grid(row=9,column=6)
-        condition_step_var = StringVar()
-        condition_step_entry = Entry(optimization_screen_frame,textvariable=condition_step_var)
-        condition_step_entry.grid(row=9,column=7)
+        condition1_step_var = StringVar()
+        condition1_step_entry = Entry(optimization_screen_frame,textvariable=condition1_step_var)
+        condition1_step_entry.grid(row=9,column=7)
+
+        Label(optimization_screen_frame,text='Condition 2:').grid(row=10,column=0)
+        condition2_var = StringVar()
+        condition2_entry = Entry(optimization_screen_frame,textvariable=condition2_var)
+        condition2_entry.grid(row=10,column=1)
+        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=10,column=2)
+        condition2_start_var = StringVar()
+        condition2_start_entry = Entry(optimization_screen_frame,textvariable=condition2_start_var)
+        condition2_start_entry.grid(row=10,column=3)
+        Label(optimization_screen_frame,text='Condition Concentration Stop (non-inclusive):').grid(row=10,column=4)
+        condition2_stop_var = StringVar()
+        condition2_stop_entry = Entry(optimization_screen_frame,textvariable=condition2_stop_var)
+        condition2_stop_entry.grid(row=10,column=5)
+        Label(optimization_screen_frame,text='Condition Concentration Step (required!):').grid(row=10,column=6)
+        condition2_step_var = StringVar()
+        condition2_step_entry = Entry(optimization_screen_frame,textvariable=condition2_step_var)
+        condition2_step_entry.grid(row=10,column=7)
+
+        Label(optimization_screen_frame,text='Condition 3:').grid(row=11,column=0)
+        condition3_var = StringVar()
+        condition3_entry = Entry(optimization_screen_frame,textvariable=condition3_var)
+        condition3_entry.grid(row=11,column=1)
+        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=11,column=2)
+        condition3_start_var = StringVar()
+        condition3_start_entry = Entry(optimization_screen_frame,textvariable=condition3_start_var)
+        condition3_start_entry.grid(row=11,column=3)
+        Label(optimization_screen_frame,text='Condition Concentration Stop (non-inclusive):').grid(row=11,column=4)
+        condition3_stop_var = StringVar()
+        condition3_stop_entry = Entry(optimization_screen_frame,textvariable=condition3_stop_var)
+        condition3_stop_entry.grid(row=11,column=5)
+        Label(optimization_screen_frame,text='Condition Concentration Step (required!):').grid(row=11,column=6)
+        condition3_step_var = StringVar()
+        condition3_step_entry = Entry(optimization_screen_frame,textvariable=condition3_step_var)
+        condition3_step_entry.grid(row=11,column=7)
+
+        Label(optimization_screen_frame,text='Condition 4:').grid(row=12,column=0)
+        condition4_var = StringVar()
+        condition4_entry = Entry(optimization_screen_frame,textvariable=condition4_var)
+        condition4_entry.grid(row=12,column=1)
+        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=12,column=2)
+        condition4_start_var = StringVar()
+        condition4_start_entry = Entry(optimization_screen_frame,textvariable=condition4_start_var)
+        condition4_start_entry.grid(row=12,column=3)
+        Label(optimization_screen_frame,text='Condition Concentration Stop (non-inclusive):').grid(row=12,column=4)
+        condition4_stop_var = StringVar()
+        condition4_stop_entry = Entry(optimization_screen_frame,textvariable=condition4_stop_var)
+        condition4_stop_entry.grid(row=12,column=5)
+        Label(optimization_screen_frame,text='Condition Concentration Step (required!):').grid(row=12,column=6)
+        condition4_step_var = StringVar()
+        condition4_step_entry = Entry(optimization_screen_frame,textvariable=condition4_step_var)
+        condition4_step_entry.grid(row=12,column=7)
 
         def save_condition_settings():
             pH_step = 1
@@ -1023,41 +1074,45 @@ class CrystalDex_main:
                 else:
                     messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
             pH_steps = (pH_stop-pH_start)/pH_step
-            if condition_var:
-                condition = condition_var.get()
-                if condition_start_var:
-                    condition_start = float(condition_start_var.get())
-                    if condition_stop_var:
-                        condition_stop = float(condition_stop_var.get())
-                        if condition_step_var:
-                            condition_step = float(condition_step_var.get())
-                            condition_steps = (condition_stop-condition_start)/condition_step
-                            if pH_steps == condition_steps:
-                                for new_condition_number in range(condition_steps):
-                                    new_condition_concentration = new_condition_number*condition_step+condition_start
-                                    new_pH = new_condition_number*pH_step+pH_start
-                                    new_condition = f'{new_condition_concentration} M {condition}, pH {new_pH}'
-                                    entered = False
-                                    if not entered:
-                                        for condition in conditions:
-                                            if condition == '':
-                                                conditions[condition] = f'{condition}. {new_condition}'
-                                                entered = True
+
+            new_conditions = [[condition1_var,condition1_start_var,condition1_stop_var,condition1_step_var],[condition2_var,condition2_start_var,condition2_stop_var,condition2_step_var],[condition3_var,condition3_start_var,condition3_stop_var,condition3_step_var],[condition4_var,condition4_start_var,condition4_stop_var,condition4_step_var]]
+
+            for new_condition_list in new_conditions:
+                if new_condition_list[0]:
+                    new_condition = new_condition_list[0].get()
+                    if new_condition_list[1]:
+                        new_condition_start = float(new_condition_list[1].get())
+                        if new_condition_list[2]:
+                            new_condition_stop = float(new_condition_list[2].get())
+                            if new_condition_list[3]:
+                                new_condition_step = float(new_condition_list[3].get())
+                                new_condition_steps = (new_condition_stop-new_condition_start)/new_condition_step
+                                if pH_steps == new_condition_steps:
+                                    for new_condition_number in range(new_condition_steps):
+                                        new_condition1_concentration = new_condition_number*new_condition_step+new_condition_start
+                                        new_pH = new_condition_number*pH_step+pH_start
+                                        new_condition = f'{new_condition1_concentration} M {new_condition}, pH {new_pH}'
+                                        entered = False
+                                        if not entered:
+                                            for condition in conditions:
+                                                if condition == '':
+                                                    conditions[condition] = f'{condition}. {new_condition}'
+                                                    entered = True
+                            else:
+                                messagebox.showerror(title='No Condition Concentration Step',message=f"Please enter a Condition Concentration Step. This is the increment you'd like to increase your condition's concentration by.")
                         else:
-                            messagebox.showerror(title='No Condition Concentration Step',message=f"Please enter a Condition Concentration Step. This is the increment you'd like to increase your condition's concentration by.")
+                            messagebox.showerror(title='No Condition Concentration Stop',message=f"Please enter a Condition Concentration Stop. This is the final (highest) concentration you'd like to include in your optimization of this condition.")
                     else:
-                        messagebox.showerror(title='No Condition Concentration Stop',message=f"Please enter a Condition Concentration Stop. This is the final (highest) concentration you'd like to include in your optimization of this condition.")
+                        messagebox.showerror(title='No Condition Concentration Start',message=f"Please enter a Condition Concentration Start. This is the initial (lowest) concentration you'd like to include in your optimization of this condition.")
                 else:
-                    messagebox.showerror(title='No Condition Concentration Start',message=f"Please enter a Condition Concentration Start. This is the initial (lowest) concentration you'd like to include in your optimization of this condition.")
-            else:
-                messagebox.showerror(title='No Condition selected',message=f"Please enter a condition to begin generating a list of optimizations")
+                    messagebox.showerror(title='No Condition selected',message=f"Please enter a condition to begin generating a list of optimizations")
 
         Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
 
         conditions_var = StringVar(value=conditions)
         self.selected_condition = StringVar()
         conditions_listbox = Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
-        conditions_listbox.grid(row=12,column=0,columnspan=3)
+        conditions_listbox.grid(row=13,column=0,columnspan=3)
 
 if __name__ == "__main__":
     app = CrystalDex_main()
