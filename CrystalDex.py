@@ -884,8 +884,8 @@ class CrystalDex_main:
             listbox_label.grid(row=2,column=0)
             listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
             condition_var = StringVar(value=listbox_values)
-            conditions_listbox = Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
-            conditions_listbox.grid(row=3,column=0,columnspan=3)
+            ref_conditions_listbox = Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
+            ref_conditions_listbox.grid(row=3,column=0,columnspan=3)
             
             edited_condition = StringVar()
             condition_entry = Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
@@ -894,13 +894,13 @@ class CrystalDex_main:
             selected_index = IntVar(value=-1)
 
             def show_condition(event):
-                selection = conditions_listbox.curselection()
+                selection = ref_conditions_listbox.curselection()
                 if selection:
                     index = selection[0]
                     selected_index.set(index)
                     edited_condition.set(f'{conditions[index]}')
 
-            conditions_listbox.bind('<<ListboxSelect>>',show_condition)
+            ref_conditions_listbox.bind('<<ListboxSelect>>',show_condition)
 
             def overwrite():
                 index = selected_index.get()
@@ -934,6 +934,9 @@ class CrystalDex_main:
         self.crystal_screen = None
         conditions = ['' for _ in range(96)]
         selected_index = IntVar(value=-1)
+
+        def make_tray_translator():
+            Label(optimization_screen_frame,text='Navigate to: https://hamptonresearch.com/make-tray.php and enter your condition to generate a list of optimization conditions.\n Then, proceed to copy it into CrystalDex as follows.').grid(column=0,row=0)
 
         def lookup_condition():
             if os.path.exists('Crystal_Screens.json'):
@@ -999,57 +1002,57 @@ class CrystalDex_main:
         pH_stop_entry = Entry(optimization_screen_frame,textvariable=pH_stop_var)
         pH_stop_entry.grid(row=8,column=5)
 
-        Label(optimization_screen_frame,text='Condition 1:').grid(row=9,column=0)
+        Label(optimization_screen_frame,text='Ingredient 1:').grid(row=9,column=0)
         ingredient1_var = StringVar()
         ingredient1_entry = Entry(optimization_screen_frame,textvariable=ingredient1_var)
         ingredient1_entry.grid(row=9,column=1)
-        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=9,column=2)
+        Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=9,column=2)
         ingredient1_start_var = StringVar()
         ingredient1_start_entry = Entry(optimization_screen_frame,textvariable=ingredient1_start_var)
         ingredient1_start_entry.grid(row=9,column=3)
-        Label(optimization_screen_frame,text='Condition Concentration Stop:').grid(row=9,column=4)
+        Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=9,column=4)
         ingredient1_stop_var = StringVar()
         ingredient1_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient1_stop_var)
         ingredient1_stop_entry.grid(row=9,column=5)
 
-        Label(optimization_screen_frame,text='Condition 2:').grid(row=10,column=0)
+        Label(optimization_screen_frame,text='Ingredient 2:').grid(row=10,column=0)
         ingredient2_var = StringVar()
         ingredient2_entry = Entry(optimization_screen_frame,textvariable=ingredient2_var)
         ingredient2_entry.grid(row=10,column=1)
-        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=10,column=2)
+        Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=10,column=2)
         ingredient2_start_var = StringVar()
         ingredient2_start_entry = Entry(optimization_screen_frame,textvariable=ingredient2_start_var)
         ingredient2_start_entry.grid(row=10,column=3)
-        Label(optimization_screen_frame,text='Condition Concentration Stop:').grid(row=10,column=4)
+        Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=10,column=4)
         ingredient2_stop_var = StringVar()
         ingredient2_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient2_stop_var)
         ingredient2_stop_entry.grid(row=10,column=5)
 
-        Label(optimization_screen_frame,text='Condition 3:').grid(row=11,column=0)
+        Label(optimization_screen_frame,text='Ingredient 3:').grid(row=11,column=0)
         ingredient3_var = StringVar()
         ingredient3_entry = Entry(optimization_screen_frame,textvariable=ingredient3_var)
         ingredient3_entry.grid(row=11,column=1)
-        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=11,column=2)
+        Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=11,column=2)
         ingredient3_start_var = StringVar()
         ingredient3_start_entry = Entry(optimization_screen_frame,textvariable=ingredient3_start_var)
         ingredient3_start_entry.grid(row=11,column=3)
-        Label(optimization_screen_frame,text='Condition Concentration Stop:').grid(row=11,column=4)
+        Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=11,column=4)
         ingredient3_stop_var = StringVar()
         ingredient3_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient3_stop_var)
         ingredient3_stop_entry.grid(row=11,column=5)
 
-        Label(optimization_screen_frame,text='Condition 4:').grid(row=12,column=0)
-        ingredient4_var = StringVar()
-        ingredient4_entry = Entry(optimization_screen_frame,textvariable=ingredient4_var)
-        ingredient4_entry.grid(row=12,column=1)
-        Label(optimization_screen_frame,text='Condition Concentration Start (Molar):').grid(row=12,column=2)
-        ingredient4_start_var = StringVar()
-        ingredient4_start_entry = Entry(optimization_screen_frame,textvariable=ingredient4_start_var)
-        ingredient4_start_entry.grid(row=12,column=3)
-        Label(optimization_screen_frame,text='Condition Concentration Stop:').grid(row=12,column=4)
-        ingredient4_stop_var = StringVar()
-        ingredient4_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient4_stop_var)
-        ingredient4_stop_entry.grid(row=12,column=5)
+        Label(optimization_screen_frame,text='Buffer:').grid(row=12,column=0)
+        buffer_var = StringVar()
+        buffer_entry = Entry(optimization_screen_frame,textvariable=buffer_var)
+        buffer_entry.grid(row=12,column=1)
+        Label(optimization_screen_frame,text='Buffer Concentration Start (Molar):').grid(row=12,column=2)
+        buffer_start_var = StringVar()
+        buffer_start_entry = Entry(optimization_screen_frame,textvariable=buffer_start_var)
+        buffer_start_entry.grid(row=12,column=3)
+        Label(optimization_screen_frame,text='Buffer Concentration Stop (normally same as Start):').grid(row=12,column=4)
+        buffer_stop_var = StringVar()
+        buffer_stop_entry = Entry(optimization_screen_frame,textvariable=buffer_stop_var)
+        buffer_stop_entry.grid(row=12,column=5)
 
         def save_condition_settings():
             steps = 1
@@ -1066,7 +1069,7 @@ class CrystalDex_main:
                 else:
                     messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
 
-            new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get()],[ingredient4_var.get(),ingredient4_start_var.get(),ingredient4_stop_var.get()]]
+            new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get()],[buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get()]]
             new_conditions = ['' for _ in range(steps)]
             for new_condition_number in range(steps):
                 for new_ingredient in new_condition_instructions:
@@ -1090,6 +1093,7 @@ class CrystalDex_main:
         self.selected_condition = StringVar()
         conditions_listbox = Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
         conditions_listbox.grid(row=13,column=0,columnspan=3)
+        
         Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
 
 if __name__ == "__main__":
