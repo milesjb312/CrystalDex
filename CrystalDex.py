@@ -1193,9 +1193,9 @@ class CrystalDex_main:
                 quad1 = Frame(vcs,width=300,height=200,borderwidth=2,background='blue')
                 quad1.grid(row=0,column=0)
                 quad2 = Frame(vcs,width=300,height=200,borderwidth=2)
-                quad2.grid(row=0,column=1)
+                quad2.grid(row=1,column=0)
                 quad3 = Frame(vcs,width=300,height=200,borderwidth=2)
-                quad3.grid(row=1,column=0)
+                quad3.grid(row=0,column=1)
                 quad4 = Frame(vcs,width=300,height=200,borderwidth=2)
                 quad4.grid(row=1,column=1)
 
@@ -1210,41 +1210,63 @@ class CrystalDex_main:
                             quad2.configure(background='gray')
                             quad3.configure(background='blue')
                         elif self.quad ==3:
+                            self.quad = 4
                             quad3.configure(background='gray')
                             quad4.configure(background='blue')
+                        elif self.quad == 4:
+                            self.quad = 5
                     change_quad()
                     steps = 6
                     pH_stop = 0
                     pH_step = 0
+                    pH_steps = 4
                     if pH_start_var:
                         pH_start = float(pH_start_var.get())
                         if pH_stop_var:
                             pH_stop = float(pH_stop_var.get())
                             if pH_stop>pH_start:
-                                pH_step = round((pH_stop-pH_start)/(steps-1),2)
+                                pH_step = round((pH_stop-pH_start)/(pH_steps-1),2)
                         else:
                             messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
 
                     new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get()],[buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get()]]
-                    new_conditions = ['' for _ in range(steps)]
+                    new_conditions = ['' for _ in range(96)]
+                    condition = -1
                     for new_condition_number in range(steps):
-                        for new_ingredient in new_condition_instructions:
-                            if '' not in [new_ingredient[0],new_ingredient[1],new_ingredient[2]]:
-                                new_ingredient_id = new_ingredient[0]
-                                new_condition_start = float(new_ingredient[1])
-                                new_condition_stop = float(new_ingredient[2])
-                                new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
-                                new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
-                                new_conditions[new_condition_number] += f'{new_condition_concentration} M {new_ingredient_id}, '
-                        new_conditions[new_condition_number] += f'pH {new_condition_number*pH_step+pH_start}'
+                        for new_pH_number in range(pH_steps):
+                            condition = condition+1
+                            for new_ingredient in new_condition_instructions:
+                                if '' not in [new_ingredient[0],new_ingredient[1],new_ingredient[2]]:
+                                    new_ingredient_id = new_ingredient[0]
+                                    new_condition_start = float(new_ingredient[1])
+                                    new_condition_stop = float(new_ingredient[2])
+                                    new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
+                                    new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
+                                    new_conditions[condition] += f'{new_condition_concentration} M {new_ingredient_id}, '
+                            new_conditions[condition] += f'pH {new_pH_number*pH_step+pH_start}'
 
-                    for condition in range(len(conditions)):
-                        if len(new_conditions)>0:
-                            if conditions[condition] == '':
-                                conditions[condition] = f'{new_conditions.pop(0)}'
-                            if len(new_conditions)==1:
-                                if condition == 95:
-                                    lambda: review_make_tray_copy()
+                    if self.quad == 5:
+                        quads = [[],[],[],[]]
+                        for quad in range(4):
+                            for condition in range(len(conditions)//4):
+                                quads[quad].append(new_conditions[condition])
+                        
+                        for step in range(steps):
+                            for quad in range(4):
+                                for pH_step in range(4):
+                                    if quad == 0:
+                                        conditions[step*8+pH_step] = quads[quad][step*4+pH_step]
+                                    elif quad ==1:
+                                        conditions[step*8+pH_step+4] = quads[quad][step*4+pH_step]
+                                    elif quad ==2:
+                                        conditions[step*8+pH_step+48] = quads[quad][step*4+pH_step]
+                                    elif quad ==3:
+                                        conditions[step*8+pH_step] = quads[quad][step*4+pH_step]
+
+                        print(conditions)
+                        review_make_tray_copy()
+
+
 
                 save_condition_settings_button = Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
                 save_condition_settings_button.grid(row=13,column=0)
