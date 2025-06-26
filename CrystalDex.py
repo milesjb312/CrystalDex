@@ -1261,7 +1261,7 @@ class CrystalDex_main:
                                     elif quad ==2:
                                         conditions[step*8+pH_step+48] = quads[quad][step*4+pH_step]
                                     elif quad ==3:
-                                        conditions[step*8+pH_step] = quads[quad][step*4+pH_step]
+                                        conditions[step*8+pH_step+72] = quads[quad][step*4+pH_step]
 
                         print(conditions)
                         review_make_tray_copy()
