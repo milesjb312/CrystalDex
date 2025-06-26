@@ -1245,7 +1245,6 @@ class CrystalDex_main:
                             if len(new_conditions)==1:
                                 if condition == 95:
                                     lambda: review_make_tray_copy()
-                                else: show_entry_fields(make_tray_copy=make_tray_copy)
 
                 save_condition_settings_button = Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
                 save_condition_settings_button.grid(row=13,column=0)
