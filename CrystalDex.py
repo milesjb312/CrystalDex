@@ -146,6 +146,8 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
         self.selected_condition = StringVar(value='')
+        self.long_name = ''
+        self.two_code = ''
 
     def refocus(self):
         #Refocus the window if minimized
@@ -913,7 +915,10 @@ class CrystalDex_main:
                     conditions_listbox.delete(index)
                     conditions_listbox.insert(index, f'[{condition+1}]: {text}')
                     selected_index.set(index+1)
-                    edited_condition.set(f'{conditions[index+1]}')
+                    if index !=95:
+                        edited_condition.set(f'{conditions[index+1]}')
+                    else:
+                        edited_condition.set(f'{conditions[0]}')
                     
             Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
@@ -930,18 +935,48 @@ class CrystalDex_main:
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+        optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
+
+        crystal_screens = {}
+        if os.path.exists("Crystal_Screens.json"):
+            with open("Crystal_Screens.json", "r") as s:
+                crystal_screens = json.load(s)
+                print(crystal_screens)
         
         self.crystal_screen = None
         conditions = ['' for _ in range(96)]
         selected_index = IntVar(value=-1)
         self.quad = 1
 
-        Label(optimization_screen_frame,text='Use Make Tray by Hampton to and enter your desired condition(s) to generate a list of optimization conditions').grid(column=0,row=0)
-        Button(optimization_screen_frame,text='Go',command=lambda: show_entry_fields(make_tray_copy=True)).grid(row=0,column=1,sticky='N,W')
+        Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
+        'this is often one of the most defining characteristics of any tray/screen and helps to avoid duplicate names.',justify='left').grid(column=0,row=0,columnspan=2)
 
-        Label(optimization_screen_frame,text='Or for complete manual input, look up a reference condition from a screen in CrystalDex').grid(column=0,row=1,sticky='N,W')
-        Button(optimization_screen_frame,text='Look up',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=1,column=1,sticky='N,W')
+        Label(optimization_screen_frame,text='Complete name of new optimization screen:').grid(row=1,column=0)
+        long_name = StringVar()
+        long_name_entry = Entry(optimization_screen_frame,textvariable=long_name)
+        long_name_entry.grid(row=1,column=1)
+
+        Label(optimization_screen_frame,text='Two-character code for optimization screen:').grid(row=2,column=0)
+        two_code = StringVar()
+        two_code_entry = Entry(optimization_screen_frame,textvariable=two_code)
+        two_code_entry.grid(row=2,column=1)
+
+        Button(optimization_screen_frame,text='Continue',command=lambda: select_type(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
+
+        def select_type(long_name,two_code):
+            self.long_name = long_name
+            self.two_code = two_code
+            self.clear_widgets()
+            self.add_menu()
+            self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+            optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
+            optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
+
+            Label(optimization_screen_frame,text='Use Make Tray by Hampton to and enter your desired condition(s) to generate a list of optimization conditions').grid(column=0,row=0)
+            Button(optimization_screen_frame,text='Go',command=lambda: show_entry_fields(make_tray_copy=True)).grid(row=0,column=1,sticky='N,W')
+
+            Label(optimization_screen_frame,text='Or for complete manual input, look up a reference condition from a screen in CrystalDex').grid(column=0,row=1,sticky='N,W')
+            Button(optimization_screen_frame,text='Look up',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=1,column=1,sticky='N,W')
 
         def show_entry_fields(make_tray_copy):
             self.clear_widgets()
@@ -1081,11 +1116,12 @@ class CrystalDex_main:
 
                     def save_condition_settings():
                         steps = 1
-                        pH_stop = 0
+                        pH_start = -99
+                        pH_stop = -99
                         pH_step = 0
-                        if pH_start_var:
+                        if pH_start_var!=-99:
                             pH_start = float(pH_start_var.get())
-                            if pH_stop_var:
+                            if pH_stop_var!=-99:
                                 pH_stop = float(pH_stop_var.get())
                                 if steps_var:
                                     steps = int(steps_var.get())
@@ -1105,7 +1141,8 @@ class CrystalDex_main:
                                     new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
                                     new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
                                     new_conditions[new_condition_number] += f'{new_condition_concentration} M {new_ingredient_id}, '
-                            new_conditions[new_condition_number] += f'pH {new_condition_number*pH_step+pH_start}'
+                            if pH_start!=-99:
+                                new_conditions[new_condition_number] += f'pH {new_condition_number*pH_step+pH_start}'
 
                         for condition in range(len(conditions)):
                             if len(new_conditions)>0:
@@ -1115,6 +1152,9 @@ class CrystalDex_main:
                                     conditions_listbox.insert(condition, conditions[condition])
                     
                     Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
+
+                    Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=51,column=0)
+
             elif make_tray_copy:
                 w = 8
                 link = 'https://hamptonresearch.com/make-tray.php'
@@ -1217,12 +1257,13 @@ class CrystalDex_main:
                             self.quad = 5
                     change_quad()
                     steps = 6
-                    pH_stop = 0
+                    pH_start = -99
+                    pH_stop = -99
                     pH_step = 0
                     pH_steps = 4
-                    if pH_start_var:
+                    if pH_start_var.get() !='':
                         pH_start = float(pH_start_var.get())
-                        if pH_stop_var:
+                        if pH_stop_var.get()!='':
                             pH_stop = float(pH_stop_var.get())
                             if pH_stop>pH_start:
                                 pH_step = round((pH_stop-pH_start)/(pH_steps-1),2)
@@ -1243,7 +1284,8 @@ class CrystalDex_main:
                                     new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
                                     new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
                                     new_conditions[condition] += f'{new_condition_concentration} M {new_ingredient_id}, '
-                            new_conditions[condition] += f'pH {new_pH_number*pH_step+pH_start}'
+                            if pH_start != -99:
+                                new_conditions[condition] += f'pH {new_pH_number*pH_step+pH_start}'
 
                     if self.quad == 5:
                         quads = [[],[],[],[]]
@@ -1265,8 +1307,6 @@ class CrystalDex_main:
 
                         print(conditions)
                         review_make_tray_copy()
-
-
 
                 save_condition_settings_button = Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
                 save_condition_settings_button.grid(row=13,column=0)
@@ -1310,9 +1350,21 @@ class CrystalDex_main:
                             conditions_listbox.delete(index)
                             conditions_listbox.insert(index, f'[{condition+1}]: {text}')
                             selected_index.set(index+1)
-                            edited_condition.set(f'{conditions[index+1]}')
+                            if index !=95:
+                                edited_condition.set(f'{conditions[index+1]}')
+                            else:
+                                edited_condition.set(f'{conditions[0]}')
                             
                     Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
+
+                    Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=5,column=3)
+
+        def save():
+            crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
+            print(f'crystal_screens: {crystal_screens}')
+            with open("Crystal_Screens.json", "w") as c:
+                json.dump(crystal_screens, c)
+            self.startup()
 
 if __name__ == "__main__":
     app = CrystalDex_main()
