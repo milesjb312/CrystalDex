@@ -156,7 +156,8 @@ class CrystalDex_main:
         self.root.focus_force()
 
     def Box_Save(self):
-        #The following lines upload the crystal pictures from this session into Box.
+        """This method allows users to upload both pictures and workbooks into Box. I'm not sure if it will work for uploading to Box folders that are not within the user's 
+        personal directory, but I will be testing that soon."""
         for image_filename in os.listdir(crystal_pictures):
             if image_filename in self.picture_upload_filenames.keys():
                 file_path = os.path.join(crystal_pictures, image_filename)
@@ -205,6 +206,8 @@ class CrystalDex_main:
         self.startup()
     
     def load_SeBaView(self):
+        """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
+        software and simulate the correct button presses, but that is currently beyond the scope of this project."""
         exe_path = None
         if os.path.exists("SeBaView_path_file.json"):
             with open("SeBaView_path_file.json", "r") as s:
@@ -682,6 +685,7 @@ class CrystalDex_main:
             notes,
             vial=None,
             harvester=None):
+        """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         
         image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
         if self.harvesting:
@@ -754,6 +758,8 @@ class CrystalDex_main:
         self.refocus()
 
     def measure_crystal(self,function_to_run):
+        """This is one of the best features of CrystalDex! However, it does need a calibrate button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
+        """
         self.crystal_size = [0,0]
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
@@ -804,6 +810,9 @@ class CrystalDex_main:
         poll_mouse()
 
     def Harvest_Crystals(self):
+        """This is the root method that allows you to use the Select_Tray method in the harvesting mode, which forces you to include some types of data, but which also
+        creates a crystal sendoff sheet that is useful for tracking what conditions and stats each crystal had.
+        """
         self.harvesting = True
         x = 0
         for ws in self.wb:
@@ -816,8 +825,9 @@ class CrystalDex_main:
             self.startup()
 
     def Upload_Crystal_Screen(self):
-        #This needs some work because the PDFs are messy. We also need to be able to upload from Make Tray (Hampton)
-        #There also needs to be a method for selecting a two-letter name for your screen
+        """This method allows users to upload a crystal screen directly from Hampton's data sheets. It doesn't always work, but it does luckily have a method for overwriting
+        the results before you save the crystal screen. NOTE: There is currently no way for users to delete crystal screens. I may need to add this later.
+        """
         crystal_screens = {}
         if os.path.exists("Crystal_Screens.json"):
             with open("Crystal_Screens.json", "r") as s:
@@ -931,6 +941,9 @@ class CrystalDex_main:
             Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
     def Optimization_Screen(self):
+        """Allows users to either create a custom optimization screen (while optionally looking up a reference condition from any of the screens
+        currently in CrystalDex) or to copy information (by hand) from a reference sheet made by Hampton's Make Tray. NOTE: This will not work 
+        for any Make Tray optimizations that have conditions that are optimized in a non-linear manner."""
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
