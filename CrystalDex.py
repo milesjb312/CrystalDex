@@ -230,8 +230,8 @@ class CrystalDex_main:
                 SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
                 #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
                 self.SeBaView_wrapper = SeBaView_main_window.wrapper_object()
-                self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
                 self.SeBaView_wrapper.maximize()
+                self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
                 self.SeBaView_wrapper.set_focus()
                 time.sleep(0.1)
                 for i in range(2):
@@ -769,7 +769,7 @@ class CrystalDex_main:
         icon = PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
-        self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width // 4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
+        self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(FALSE,FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
         measure_tool = Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
@@ -885,8 +885,12 @@ class CrystalDex_main:
                     if line.startswith(f'{condition+1}.'):
                         line = line.strip()
                         if (any(keyword in line.lower() for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium'])) or all(keyword in line.lower() for keyword in ['ph',' m ']):
-                            conditions[condition+last_condition+offset] = line
-                            reading = True
+                            try:
+                                conditions[condition+last_condition+offset] = line
+                                reading = True
+                            except IndexError:
+                                messagebox.showerror(title='Too many conditions',message=f'There were too many conditions to add to the new screen. Please review the upload.')
+                                break
                     elif reading and not line.startswith(f'{next_condition}.'):
                             if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
                                 conditions[condition+last_condition+offset] += ' ' + line
