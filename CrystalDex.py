@@ -49,10 +49,19 @@ script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this sc
 icon_path = os.path.join(script_dir,"crystaldex_icon.png")
 crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
-
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
 desktop = os.path.expanduser("~/Desktop")
+
+#Dictionaries:
+subwell_to_condition_dict = {
+                f"{col}{row}": i
+                for i, (row, col) in enumerate(
+                    (r, c) for r in range(1, 13) for c in "ABCDEFGH"
+                )
+            }
+
+well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
 
 def on_click(x,y,button,pressed):
     global mouse_is_down
@@ -238,6 +247,17 @@ class CrystalDex_main:
                 file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
                 )
             )
+        
+        #The following command uploads the Crystal_Screens.json
+        self.client.uploads.upload_file_version(
+            attributes=box_sdk_gen.UploadFileAttributesParentField(
+                name="Crystal_Screens.json",
+                id="328850485682"),
+                file_id="1911117169207",
+                file=open(os.path.abspath("Crystal_Screens.json"),"rb"
+                )
+            )
+        
         if self.harvesting:
             self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
@@ -743,7 +763,6 @@ class CrystalDex_main:
             for i in range(2):
                 self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-            well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
             row = well_to_excel_dict.get(well_row)
             column = well_to_excel_dict.get(well_column)
             
@@ -789,8 +808,9 @@ class CrystalDex_main:
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
                 #not sure how to do link, has something to do with the Box_save function...
-                crystal_cell.offset(row=0,column=1).value = 'condition undetermined...'
-                crystal_cell.offset(row=0,column=2).value = f'shape'
+                condition = crystal_screen[subwell_to_condition_dict[f'{well_column}{well_row}']]
+                crystal_cell.offset(row=0,column=1).value = condition
+                crystal_cell.offset(row=0,column=2).value = f'{shape}'
                 crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
                 crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
                 crystal_cell.offset(row=0,column=5).value = harvester
@@ -866,7 +886,7 @@ class CrystalDex_main:
         if x>1:
             self.Select_Tray()
         else:
-            print(f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
+            messagebox.showerror(title='No crystal trays indexed yet...',message=f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
             self.startup()
 
     def Upload_Crystal_Screen(self):
@@ -982,6 +1002,7 @@ class CrystalDex_main:
                 with open("Crystal_Screens.json", "w") as c:
                     json.dump(self.crystal_screens, c)
                 self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
+                self.Box_Save()
             
             Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
@@ -1432,6 +1453,7 @@ class CrystalDex_main:
             print(f'crystal_screens: {self.crystal_screens}')
             with open("Crystal_Screens.json", "w") as c:
                 json.dump(self.crystal_screens, c)
+            self.Box_Save()
             self.startup()
 
 if __name__ == "__main__":
