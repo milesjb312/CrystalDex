@@ -55,9 +55,9 @@ desktop = os.path.expanduser("~/Desktop")
 
 #Dictionaries:
 subwell_to_condition_dict = {
-                f"{col}{row}": i
-                for i, (row, col) in enumerate(
-                    (r, c) for r in range(1, 13) for c in "ABCDEFGH"
+                f"{row}{col}": i
+                for i,(row, col) in enumerate(
+                    (r, c) for r in "ABCDEFGH" for c in range(1, 13)
                 )
             }
 
@@ -162,8 +162,8 @@ class CrystalDex_main:
             with open("Crystal_Screens.json", "r") as s:
                 self.crystal_screens = json.load(s)
                 for crystal_screen in self.crystal_screens.keys():
-                    self.crystal_screen_values.append(crystal_screen.split('__')[0])
-                    self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
+                    self.crystal_screen_values.append(crystal_screen)
+                    self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
         else:
             pass
 
@@ -505,7 +505,7 @@ class CrystalDex_main:
                 indexable = True
             except ValueError:
                 messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
-        if crystal_screen in self.crystal_screen_values:
+        if crystal_screen in self.crystal_screens.keys():
             indexable = True
         else: 
             messagebox.showerror(title="Crystal Screen Does Not Exist",message="The crystal screen you attempted to reference does not exist.")
@@ -562,19 +562,19 @@ class CrystalDex_main:
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.")
         ensure_magnified_label.grid(column=1,row=1)
 
-        well_column_label = ttk.Label(subwell_frame,text="Well column:")
-        well_column_label.grid(column=1,row=2)
-        well_column_values = ['A','B','C','D','E','F','G','H']
-        well_column_var = StringVar()
-        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
-        well_column_drop_down.grid(column=2,row=2)
-
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
-        well_row_label.grid(column=1,row=3)
-        well_row_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
+        well_row_label.grid(column=1,row=2)
+        well_row_values = ['A','B','C','D','E','F','G','H']
         well_row_var = StringVar()
         well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row_var,values=well_row_values)
-        well_row_drop_down.grid(column=2,row=3)
+        well_row_drop_down.grid(column=2,row=2)
+
+        well_column_label = ttk.Label(subwell_frame,text="Well column:")
+        well_column_label.grid(column=1,row=3)
+        well_column_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
+        well_column_var = StringVar()
+        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
+        well_column_drop_down.grid(column=2,row=3)
 
         subwell_values = ['top_left','top_right','bottom_left']
         subwell_label = ttk.Label(subwell_frame,text="subwell:")
@@ -676,8 +676,8 @@ class CrystalDex_main:
                         chaperone,
                         target_protein,
                         crystal_screen,
-                        str(well_column_var.get()),
                         str(well_row_var.get()),
+                        str(well_column_var.get()),
                         str(subwell_var.get()),
                         str(number_of_crystals_var.get()),
                         str(shape_var.get()),
@@ -698,8 +698,8 @@ class CrystalDex_main:
                         chaperone,
                         target_protein,
                         crystal_screen,
-                        str(well_column_var.get()),
                         str(well_row_var.get()),
+                        str(well_column_var.get()),
                         str(subwell_var.get()),
                         str(number_of_crystals_var.get()),
                         str(shape_var.get()),
@@ -736,8 +736,8 @@ class CrystalDex_main:
             chaperone,
             target_protein,
             crystal_screen,
-            well_column,
             well_row,
+            well_column,
             subwell,
             number_of_crystals,
             shape,
@@ -752,7 +752,7 @@ class CrystalDex_main:
             harvester=None):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         
-        image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{well_column}{well_row}_{subwell}_{date_set}_{date_snapped}'
+        image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{well_row}{well_column}_{subwell}_{date_set}_{date_snapped}'
         if self.harvesting:
             image_title = image_title+'_harvested'
 
@@ -766,7 +766,7 @@ class CrystalDex_main:
             row = well_to_excel_dict.get(well_row)
             column = well_to_excel_dict.get(well_column)
             
-            picture_link_cell = ws[f'{row}{column}']
+            picture_link_cell = ws[f'{column}{row}']
             if subwell=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
             elif subwell=='bottom_left':
@@ -808,7 +808,7 @@ class CrystalDex_main:
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
                 #not sure how to do link, has something to do with the Box_save function...
-                condition = crystal_screen[subwell_to_condition_dict[f'{well_column}{well_row}']]
+                condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{well_row}{well_column}']]
                 crystal_cell.offset(row=0,column=1).value = condition
                 crystal_cell.offset(row=0,column=2).value = f'{shape}'
                 crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
@@ -1061,8 +1061,8 @@ class CrystalDex_main:
             if not make_tray_copy:
                 def choose_ref():
                     for crystal_screen in self.crystal_screens.keys():
-                        self.crystal_screen_values.append(crystal_screen.split('__')[0])
-                        self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
+                        self.crystal_screen_values.append(crystal_screen)
+                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
                         crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
                         crystal_screens_label.grid(row=1,column=0)
                         crystal_screen_var = StringVar(value=self.crystal_screen_values)
