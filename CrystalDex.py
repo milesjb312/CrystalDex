@@ -11,6 +11,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
+import threading
 
 #GUI imports
 #https://tkdocs.com/tutorial/intro.html#audience
@@ -72,6 +73,35 @@ listener.start()
 
 class CrystalDex_main:
     def __init__(self):
+        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+        self.tray_names = {}
+        self.crystal_size = [0,0]
+        self.harvesting = False
+        self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
+        self.picture_upload_filenames = {}
+        self.button_location = None
+        self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
+        self.not_first = ''
+        self.long_name = ''
+        self.two_code = ''
+        self.opened_microscope_app = False
+
+        #Tkinter initializations
+        root=Tk()
+        self.root = root
+        self.root.title("CrystalDex")
+        icon = PhotoImage(file=icon_path)
+        self.root.iconphoto(True,icon)
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+        self.root.minsize(self.screen_width//5,600)
+        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
+        #Make the window resizable:
+        self.root.columnconfigure(0,weight=1)
+        self.root.rowconfigure(0,weight=1)
+        self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
+        self.selected_condition = StringVar(value='')
+
         #Box integrations:
         CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
         CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
@@ -167,36 +197,6 @@ class CrystalDex_main:
         else:
             pass
 
-
-        #Other frequently accessed values (will be turned into a .json soon):
-        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
-        self.tray_names = {}
-        self.crystal_size = [0,0]
-        self.harvesting = False
-        self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
-        self.picture_upload_filenames = {}
-        self.button_location = None
-        self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
-        self.not_first = ''
-
-        #Tkinter initializations
-        root=Tk()
-        self.root = root
-        self.root.title("CrystalDex")
-        icon = PhotoImage(file=icon_path)
-        self.root.iconphoto(True,icon)
-        self.screen_width = self.root.winfo_screenwidth()
-        self.screen_height = self.root.winfo_screenheight()
-        self.root.minsize(self.screen_width//5,600)
-        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
-        #Make the window resizable:
-        self.root.columnconfigure(0,weight=1)
-        self.root.rowconfigure(0,weight=1)
-        self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
-        self.selected_condition = StringVar(value='')
-        self.long_name = ''
-        self.two_code = ''
-
     def reload_crystal_screens(self):
         if os.path.exists("Crystal_Screens.json"):
             with open("Crystal_Screens.json", "r") as s:
@@ -267,9 +267,19 @@ class CrystalDex_main:
                 file=open(os.path.abspath("Crystal_Sendoff_Sheet.xlsx"),"rb"
                 )
             )
+        if self.splash_win.winfo_exists:
+            self.root.after(0,self.splash_win.destroy)
+        else:
+            self.root.after(0,self.startup)        
 
-        self.startup()
-    
+    def splash(self):
+        self.splash_win = Toplevel(self.root)
+        self.splash_win.overrideredirect(True)
+        self.splash_win.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
+        self.splash_image = PhotoImage(file=icon_path)
+        Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
+        self.splash_win.attributes('-topmost',True)
+
     def load_SeBaView(self):
         """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
         software and simulate the correct button presses, but that is currently beyond the scope of this project."""
@@ -302,9 +312,11 @@ class CrystalDex_main:
                 for i in range(2):
                     self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
                 self.SeBaView_wrapper.minimize()
+                self.opened_microscope_app = True
             except Exception as e:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
+        self.root.after(0,self.splash_win.destroy)
 
     def close_SeBaView_and_root(self):
         try:
@@ -314,6 +326,9 @@ class CrystalDex_main:
         self.root.destroy()
 
     def startup(self):
+        if not self.opened_microscope_app:
+            self.splash()
+            threading.Thread(target=self.load_SeBaView,daemon=True).start()
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
@@ -329,7 +344,7 @@ class CrystalDex_main:
 
         for i in range(2):
             self.refocus()
-        self.root.mainloop() #This has to be the last line of code in the startup function.
+        self.root.mainloop() #This has to be the last line of code in the startup function (it can't be placed anywhere before SeBaView is loaded)
 
     def add_menu(self):
         menu = Menu(self.root)
@@ -357,7 +372,6 @@ class CrystalDex_main:
     def New_Tray(self):
         self.clear_widgets()
         self.add_menu()
-        self.root.geometry()
         new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
         new_tray_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
@@ -444,7 +458,6 @@ class CrystalDex_main:
     def Select_Tray(self,short_title=None):
         self.clear_widgets()
         self.add_menu()
-        self.root.geometry()
         st_frame = ttk.Frame(self.root,padding="3 3 12 12")
         st_frame.grid(column=0,row=0,sticky=(N,W))
         self.root.columnconfigure(0,weight=1)
@@ -759,7 +772,7 @@ class CrystalDex_main:
         def take_take_picture():
             self.SeBaView_wrapper.set_focus()
             self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
-            time.sleep(3)
+            time.sleep(1)
             for i in range(2):
                 self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
@@ -1453,10 +1466,10 @@ class CrystalDex_main:
             print(f'crystal_screens: {self.crystal_screens}')
             with open("Crystal_Screens.json", "w") as c:
                 json.dump(self.crystal_screens, c)
-            self.Box_Save()
+            self.splash()
+            threading.Thread(target=self.Box_Save,daemon=True).start()
             self.startup()
 
 if __name__ == "__main__":
     app = CrystalDex_main()
-    app.load_SeBaView()
     app.startup()
