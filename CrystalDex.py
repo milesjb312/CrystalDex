@@ -31,6 +31,7 @@ import webbrowser
 #https://pywinauto.readthedocs.io/en/latest/getting_started.html
 import psutil
 import pywinauto
+import pyperclip
 from pywinauto.application import Application
 from pywinauto import timings
 import pyautogui
@@ -72,23 +73,52 @@ class CrystalDex_main:
             token_storage=token_storage
         )
         auth = BoxOAuth(config)
+
+        def get_code():
+            for proc in reversed(list(psutil.process_iter(['pid','name']))):
+                if proc.info['name'] and 'msedge.exe'.lower() in proc.info['name'].lower():
+                    print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')
+                    try:
+                        browser = Application().connect(process=proc.info['pid'])
+                        browser.top_window().set_focus()
+                        start = time.time()
+                        while time.time() - start< 120:
+                            try:
+                                pyautogui.hotkey('ctrl','l')
+                                time.sleep(0.1)
+                                pyautogui.hotkey('ctrl','c')
+                                time.sleep(0.1)
+                                url = pyperclip.paste()
+                                if 'code=' in url and 'localhost' in url:
+                                    print(f'url: {url}')
+                                    authorization_code = url.split('code=')[1]
+                                    return authorization_code
+                            except Exception as e:
+                                print('Error while reading clipboard:', e)
+                            time.sleep(.1)
+                        return True
+                    except Exception:
+                        pass
+            return False
+
         try:
             auth.retrieve_token()
-            print(f'User already approved app for Box.')
+            #print(f'User already approved app for Box.')
         except BoxSDKError:
             auth_url = auth.get_authorize_url()
-            webbrowser.open(auth_url)
-            authorization_code = input("Paste the code you got after approving: ")
+            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
+            authorization_code = get_code()
             auth.get_tokens_authorization_code_grant(authorization_code)
+
         self.client = BoxClient(auth=auth)
 
         #Access CrystalDex_Library or the Mastercopy:
         file_download = None
         try:
-            file_id = '1892938696722'
+            file_id = '1911115179608'
             file_download = self.client.downloads.download_file(file_id).read()
         except FileNotFoundError:
-            file_id = '1861370891462'
+            file_id = '1911117908557'
             file_download = self.client.downloads.download_file(file_id).read()
 
         #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
@@ -99,30 +129,39 @@ class CrystalDex_main:
         #Access Crystal_Sendoff_Sheet:
         file_download = None
         try:
-            file_id = '1898979834553'
+            file_id = '1911117898957'
             file_download = self.client.downloads.download_file(file_id).read()
         except FileNotFoundError:
-            file_id = '1898987747956'
+            file_id = '1911115194008'
             file_download = self.client.downloads.download_file(file_id).read()
         with open('Crystal_Sendoff_Sheet.xlsx','wb') as s:
             s.write(file_download)
         self.sendoff_workbook = load_workbook(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
         self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
-        #Other frequently accessed values (will be turned into a .json soon):
-        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+        #Access Crystal_Screens.json:
+        self.crystal_screens = {}
+        file_download = None
+        try:
+            file_id = 1911117169207
+            file_download = self.client.downloads.download_file(file_id).read()
+        except FileNotFoundError:
+            pass
         self.crystal_screen_values = []
         self.crystal_screen_symbols = {}
         if os.path.exists("Crystal_Screens.json"):
             with open("Crystal_Screens.json", "r") as s:
-                crystal_screens = json.load(s)
-                for crystal_screen in crystal_screens.keys():
+                self.crystal_screens = json.load(s)
+                for crystal_screen in self.crystal_screens.keys():
                     self.crystal_screen_values.append(crystal_screen.split('__')[0])
                     self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
         else:
             pass
-        self.tray_names = {}
 
+
+        #Other frequently accessed values (will be turned into a .json soon):
+        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+        self.tray_names = {}
         self.crystal_size = [0,0]
         self.harvesting = False
         self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
@@ -148,6 +187,12 @@ class CrystalDex_main:
         self.selected_condition = StringVar(value='')
         self.long_name = ''
         self.two_code = ''
+
+    def reload_crystal_screens(self):
+        if os.path.exists("Crystal_Screens.json"):
+            with open("Crystal_Screens.json", "r") as s:
+                self.crystal_screens = json.load(s)
+                #print(self.crystal_screens)
 
     def refocus(self):
         #Refocus the window if minimized
@@ -188,8 +233,8 @@ class CrystalDex_main:
         self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
                 name="CrystalDex_Library.xlsx",
-                id="320928486478"),
-                file_id="1892938696722",
+                id="328850485682"),
+                file_id="1911115179608",
                 file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
                 )
             )
@@ -197,8 +242,8 @@ class CrystalDex_main:
             self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
                 name="Crystal_Sendoff_Sheet.xlsx",
-                id="320928486478"),
-                file_id="1898979834553",
+                id="328850485682"),
+                file_id="1911117898957",
                 file=open(os.path.abspath("Crystal_Sendoff_Sheet.xlsx"),"rb"
                 )
             )
@@ -828,12 +873,7 @@ class CrystalDex_main:
         """This method allows users to upload a crystal screen directly from Hampton's data sheets. It doesn't always work, but it does luckily have a method for overwriting
         the results before you save the crystal screen. NOTE: There is currently no way for users to delete crystal screens. I may need to add this later.
         """
-        crystal_screens = {}
-        if os.path.exists("Crystal_Screens.json"):
-            with open("Crystal_Screens.json", "r") as s:
-                crystal_screens = json.load(s)
-                print(crystal_screens)
-
+        self.reload_crystal_screens()
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
@@ -891,6 +931,7 @@ class CrystalDex_main:
                             except IndexError:
                                 messagebox.showerror(title='Too many conditions',message=f'There were too many conditions to add to the new screen. Please review the upload.')
                                 break
+                                #Note that this is a very rough fix to the problem.
                     elif reading and not line.startswith(f'{next_condition}.'):
                             if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
                                 conditions[condition+last_condition+offset] += ' ' + line
@@ -937,9 +978,9 @@ class CrystalDex_main:
             Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
             def save():
-                crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
+                self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
                 with open("Crystal_Screens.json", "w") as c:
-                    json.dump(crystal_screens, c)
+                    json.dump(self.crystal_screens, c)
                 self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
             
             Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
@@ -954,12 +995,7 @@ class CrystalDex_main:
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
-        crystal_screens = {}
-        if os.path.exists("Crystal_Screens.json"):
-            with open("Crystal_Screens.json", "r") as s:
-                crystal_screens = json.load(s)
-                print(crystal_screens)
-        
+        self.reload_crystal_screens()
         self.crystal_screen = None
         conditions = ['' for _ in range(96)]
         selected_index = IntVar(value=-1)
@@ -1003,29 +1039,18 @@ class CrystalDex_main:
             optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
             if not make_tray_copy:
                 def choose_ref():
-                    if self.selected_condition.get() == '':
-                        if os.path.exists('Crystal_Screens.json'):
-                            with open("Crystal_Screens.json", "r") as s:
-                                crystal_screens = json.load(s)
-                                for crystal_screen in crystal_screens.keys():
-                                    self.crystal_screen_values.append(crystal_screen.split('__')[0])
-                                    self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
-                            crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
-                            crystal_screens_label.grid(row=1,column=0)
-                            crystal_screen_var = StringVar(value=self.crystal_screen_values)
-                            crystal_screens_listbox = Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
-                            crystal_screens_listbox.grid(row=2,column=0)
-                        else:
-                            messagebox.showerror(title='No crystal screens',message=f'Your CrystalDex has no crystal screens! Upload at least one first to enable searching.')#Why doesn't this work now?
-                    
+                    for crystal_screen in self.crystal_screens.keys():
+                        self.crystal_screen_values.append(crystal_screen.split('__')[0])
+                        self.crystal_screen_symbols[crystal_screen.split('__')[0]] = crystal_screen.split('__')[1]
+                        crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
+                        crystal_screens_label.grid(row=1,column=0)
+                        crystal_screen_var = StringVar(value=self.crystal_screen_values)
+                        crystal_screens_listbox = Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
+                        crystal_screens_listbox.grid(row=2,column=0)
                     def select_and_continue():
                         lookup_conditions = []
-                        with open("Crystal_Screens.json", "r") as s:
-                            crystal_screens = json.load(s)
-                            for crystal_screen in crystal_screens.keys():
-                                for condition in crystal_screens.get(crystal_screen):
-                                    lookup_conditions.append(condition)
-
+                        for condition in self.crystal_screens.get(crystal_screen):
+                            lookup_conditions.append(condition)
                         lookup_conditions_var = StringVar(value=lookup_conditions)
                         self.crystal_screen = crystal_screen_var.get()
                         lookup_listbox = Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
@@ -1182,7 +1207,7 @@ class CrystalDex_main:
             elif make_tray_copy:
                 w = 8
                 link = 'https://hamptonresearch.com/make-tray.php'
-                webbrowser.open(link)
+                webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(link)
                 time.sleep(1)
                 self.refocus()
                 self.root.geometry(f'{self.screen_width//2}x{self.screen_height}+0+0')#Not sure why this line doesn't work
@@ -1403,10 +1428,10 @@ class CrystalDex_main:
                     Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=5,column=3)
 
         def save():
-            crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
-            print(f'crystal_screens: {crystal_screens}')
+            self.crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
+            print(f'crystal_screens: {self.crystal_screens}')
             with open("Crystal_Screens.json", "w") as c:
-                json.dump(crystal_screens, c)
+                json.dump(self.crystal_screens, c)
             self.startup()
 
 if __name__ == "__main__":
