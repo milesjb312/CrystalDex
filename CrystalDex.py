@@ -116,7 +116,7 @@ class CrystalDex_main:
         def get_code():
             for proc in reversed(list(psutil.process_iter(['pid','name']))):
                 if proc.info['name'] and 'msedge.exe'.lower() in proc.info['name'].lower():
-                    print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')
+                    print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')#For some reason, deleting this line or commenting it out messes things up.
                     try:
                         browser = Application().connect(process=proc.info['pid'])
                         browser.top_window().set_focus()
@@ -129,7 +129,7 @@ class CrystalDex_main:
                                 time.sleep(0.1)
                                 url = pyperclip.paste()
                                 if 'code=' in url and 'localhost' in url:
-                                    print(f'url: {url}')
+                                    #print(f'url: {url}')
                                     authorization_code = url.split('code=')[1]
                                     return authorization_code
                             except Exception as e:
@@ -1145,10 +1145,9 @@ class CrystalDex_main:
                     buffer_stop_var = StringVar()
                     buffer_stop_entry = Entry(optimization_screen_frame,textvariable=buffer_stop_var)
                     buffer_stop_entry.grid(row=9,column=5)
-                    Label(optimization_screen_frame,text='Weight percent:').grid(row=9,column=6)
                     buffer_weight_percent_var = BooleanVar(value=False)
-                    buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,textvariable=buffer_weight_percent_var)
-                    buffer_weight_percent_checkbutton.grid(row=9,column=7)
+                    buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
+                    buffer_weight_percent_checkbutton.grid(row=9,column=6)
 
                     Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
                     ingredient1_var = StringVar()
@@ -1270,10 +1269,9 @@ class CrystalDex_main:
                 buffer_stop_var = StringVar()
                 buffer_stop_entry = Entry(optimization_screen_frame,textvariable=buffer_stop_var,width=w)
                 buffer_stop_entry.grid(row=9,column=5)
-                Label(optimization_screen_frame,text='Weight percent:').grid(row=9,column=6)
                 buffer_weight_percent_var = BooleanVar(value=False)
-                buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,textvariable=buffer_weight_percent_var)
-                buffer_weight_percent_checkbutton.grid(row=9,column=7)
+                buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
+                buffer_weight_percent_checkbutton.grid(row=9,column=6)
 
                 Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
                 ingredient1_var = StringVar()
@@ -1287,9 +1285,8 @@ class CrystalDex_main:
                 ingredient1_stop_var = StringVar()
                 ingredient1_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient1_stop_var,width=w)
                 ingredient1_stop_entry.grid(row=10,column=5)
-                Label(optimization_screen_frame,text='Weight percent:').grid(row=10,column=6)
                 ingredient1_weight_percent_var = BooleanVar(value=False)
-                ingredient1_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,textvariable=ingredient1_weight_percent_var)
+                ingredient1_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient1_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient1_weight_percent_checkbutton.grid(row=10,column=7)
 
                 Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
@@ -1304,9 +1301,8 @@ class CrystalDex_main:
                 ingredient2_stop_var = StringVar()
                 ingredient2_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient2_stop_var,width=w)
                 ingredient2_stop_entry.grid(row=11,column=5)
-                Label(optimization_screen_frame,text='Weight percent:').grid(row=11,column=6)
                 ingredient2_weight_percent_var = BooleanVar(value=False)
-                ingredient2_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,textvariable=ingredient1_weight_percent_var)
+                ingredient2_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient2_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient2_weight_percent_checkbutton.grid(row=11,column=7)
 
                 Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
@@ -1321,9 +1317,8 @@ class CrystalDex_main:
                 ingredient3_stop_var = StringVar()
                 ingredient3_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient3_stop_var,width=w)
                 ingredient3_stop_entry.grid(row=12,column=5)
-                Label(optimization_screen_frame,text='Weight percent:').grid(row=12,column=6)
                 ingredient3_weight_percent_var = BooleanVar(value=False)
-                ingredient3_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,textvariable=ingredient1_weight_percent_var)
+                ingredient3_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient3_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient3_weight_percent_checkbutton.grid(row=12,column=7)
                 
                 Label(optimization_screen_frame,text='Virtual Crystal Screen').grid(row=14,column=2,sticky='W,E')
@@ -1385,7 +1380,7 @@ class CrystalDex_main:
                                     if not new_ingredient[3]:#if not measured by weight percent:
                                         new_conditions[condition] += f'{new_condition_concentration} M {new_ingredient_id}, '
                                     else:
-                                        new_conditions[condition] += f'{new_condition_concentration} % {new_ingredient_id}'
+                                        new_conditions[condition] += f'{new_condition_concentration} % {new_ingredient_id}, '
                             if pH_start != -99:
                                 new_conditions[condition] += f'pH {new_pH_number*pH_step+pH_start}'
 
@@ -1406,8 +1401,6 @@ class CrystalDex_main:
                                         conditions[step*8+pH_step+48] = quads[quad][step*4+pH_step]
                                     elif quad ==3:
                                         conditions[step*8+pH_step+52] = quads[quad][step*4+pH_step]
-
-                        print(conditions)
                         review_make_tray_copy()
 
                 save_condition_settings_button = Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
@@ -1444,7 +1437,7 @@ class CrystalDex_main:
 
                     def overwrite():
                         index = selected_index.get()
-                        print(f'index: {index}')
+                        #print(f'index: {index}')
                         if index >= 0:
                             text = edited_condition.get()
                             condition = index
@@ -1463,7 +1456,7 @@ class CrystalDex_main:
 
         def save():
             self.crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
-            print(f'crystal_screens: {self.crystal_screens}')
+            #print(f'crystal_screens: {self.crystal_screens}')
             with open("Crystal_Screens.json", "w") as c:
                 json.dump(self.crystal_screens, c)
             self.splash()
