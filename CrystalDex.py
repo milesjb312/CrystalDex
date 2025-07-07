@@ -77,7 +77,7 @@ class CrystalDex_main:
         self.tray_names = {}
         self.crystal_size = [0,0]
         self.harvesting = False
-        self.pixel_to_size = 1000/458 #1 millimeter or 1000 microns per 458 pixels at 40% magnification (ie. a picture size of 2560x1922pixels on the screen)
+        self.pixel_to_size = 2000/867 #2 millimeter or 2000 microns per 867 pixels at 100% magnification (ie. a picture size of 1280x960pixels on the screen)
         self.picture_upload_filenames = {}
         self.button_location = None
         self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
@@ -297,7 +297,7 @@ class CrystalDex_main:
             with open("SeBaView_path_file.json", "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             self.SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(4)
+            time.sleep(6)
             #for i, w in enumerate(self.SeBaView.windows()):
             #    print(f'[{i}] Title: {w.window_text()}')
             try:
@@ -572,7 +572,7 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         self.refocus()
 
-        ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.")
+        ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
 
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
