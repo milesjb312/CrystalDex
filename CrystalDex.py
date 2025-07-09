@@ -5,6 +5,7 @@
 #General imports
 import pandas as pd
 import os
+import glob
 import shutil
 import json
 from openpyxl import Workbook, load_workbook
@@ -105,13 +106,22 @@ class CrystalDex_main:
         #Box integrations:
         CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
         CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
-        token_storage = FileTokenStorage(filename='box_token.json')
-        config = OAuthConfig(
-            client_id=CLIENT_ID,
-            client_secret=CLIENT_SECRET,
-            token_storage=token_storage
-        )
-        auth = BoxOAuth(config)
+
+        def delete_token_files(base_name = 'box_token.json'):
+            for f in glob.glob(base_name+'*'):
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    print(f'Failed to delete {f}: {e}')
+
+        def authorize():
+            token_storage = FileTokenStorage(filename='box_token.json')
+            config = OAuthConfig(
+                client_id=CLIENT_ID,
+                client_secret=CLIENT_SECRET,
+                token_storage=token_storage
+            )
+            return BoxOAuth(config)
 
         def get_code():
             for proc in reversed(list(psutil.process_iter(['pid','name']))):
@@ -140,10 +150,15 @@ class CrystalDex_main:
                         pass
             return False
 
+        auth = authorize()
+
         try:
             auth.retrieve_token()
             #print(f'User already approved app for Box.')
-        except BoxSDKError:
+        except Exception as e:
+            print(f'Box token loading failed. Resetting token storage: {e}')
+            delete_token_files()
+            auth = authorize()
             auth_url = auth.get_authorize_url()
             webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
             authorization_code = get_code()
