@@ -49,6 +49,7 @@ import pdfplumber
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
 icon_path = os.path.join(script_dir,"crystaldex_icon.png")
+splash_path = os.path.join(script_dir,'CrystalDex_splash.png')
 crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
 home = os.path.expanduser("~")
@@ -152,29 +153,36 @@ class CrystalDex_main:
 
         auth = authorize()
 
-        try:
-            auth.retrieve_token()
-            #print(f'User already approved app for Box.')
-        except Exception as e:
-            print(f'Box token loading failed. Resetting token storage: {e}')
+        def reset_box_auth():
+            print(f'Box token loading failed. Resetting token storage.')
             delete_token_files()
             auth = authorize()
             auth_url = auth.get_authorize_url()
             webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
             authorization_code = get_code()
             auth.get_tokens_authorization_code_grant(authorization_code)
+            self.client = BoxClient(auth=auth)
 
-        self.client = BoxClient(auth=auth)
+        try:
+            auth.retrieve_token()
+            self.client = BoxClient(auth=auth)
+            #print(f'User already approved app for Box.')
+        except Exception as e:
+            reset_box_auth()
 
         #Access CrystalDex_Library or the Mastercopy:
         file_download = None
         try:
             file_id = '1911115179608'
-            file_download = self.client.downloads.download_file(file_id).read()
+            try:
+                file_download = self.client.downloads.download_file(file_id).read()
+            except Exception:
+                reset_box_auth()
+                file_download = self.client.downloads.download_file(file_id).read()
         except FileNotFoundError:
-            file_id = '1911117908557'
-            file_download = self.client.downloads.download_file(file_id).read()
-
+                file_id = '1911117908557'
+                file_download = self.client.downloads.download_file(file_id).read()
+            
         #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
         with open("CrystalDex_Library.xlsx","wb") as c:
             c.write(file_download)
@@ -290,8 +298,8 @@ class CrystalDex_main:
     def splash(self):
         self.splash_win = Toplevel(self.root)
         self.splash_win.overrideredirect(True)
-        self.splash_win.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
-        self.splash_image = PhotoImage(file=icon_path)
+        self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-590//2}')
+        self.splash_image = PhotoImage(file=splash_path)
         Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
         self.splash_win.attributes('-topmost',True)
 
@@ -529,7 +537,7 @@ class CrystalDex_main:
             date_set = (datetime.now().strftime('%m-%d-%Y'))
         else:
             try:
-                date = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
+                date_set = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
                 indexable = True
             except ValueError:
                 messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
@@ -549,17 +557,17 @@ class CrystalDex_main:
             for ws in self.wb:
                 tags_cell = str(ws['K1'].value or "")
                 tags = [tag.strip() for tag in tags_cell.split(', ')]
-                if all(term in tags for term in [date,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone]):
+                if all(term in tags for term in [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone]):
                     self.tray_names[str(ws['A1'].value)] = ws.title
                     ws_possible_duplicate_count += 1
             if ws_possible_duplicate_count >0:
-                full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
+                full_title = f'{date_set}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
                 self.Select_Tray(short_title)
             elif ws_possible_duplicate_count == 0:
                 print(f"No trays found with these stats; generating new tray!")#change this to a Tkinter messagebox or the splash screen
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
-                full_title = f'{date}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
+                full_title = f'{date_set}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
                 new_worksheet.title = short_title
                 all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values]
@@ -862,6 +870,7 @@ class CrystalDex_main:
         icon = PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
+        self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
         self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(FALSE,FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
