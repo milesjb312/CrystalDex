@@ -147,7 +147,7 @@ class CrystalDex_main:
                                     return authorization_code
                             except Exception as e:
                                 print('Error while reading clipboard:', e)
-                            time.sleep(.1)
+                            time.sleep(10)
                         return True
                     except Exception:
                         pass
