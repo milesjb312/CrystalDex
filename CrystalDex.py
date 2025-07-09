@@ -3,12 +3,11 @@
 
 #Imports
 #General imports
-import pandas as pd
 import os
 import glob
 import shutil
 import json
-from openpyxl import Workbook, load_workbook
+import openpyxl as px
 from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
@@ -17,7 +16,7 @@ import threading
 #GUI imports
 #https://tkdocs.com/tutorial/intro.html#audience
 #https://tkdocs.com/tutorial/firstexample.html#design
-from tkinter import *
+import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 from tkinter import filedialog
@@ -35,7 +34,6 @@ import psutil
 import pywinauto
 import pyperclip
 from pywinauto.application import Application
-from pywinauto import timings
 import pyautogui
 from pynput import mouse
 import pywinauto.keyboard
@@ -48,9 +46,13 @@ import pdfplumber
 
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
-icon_path = os.path.join(script_dir,"crystaldex_icon.png")
-splash_path = os.path.join(script_dir,'CrystalDex_splash.png')
-crystal_pictures = os.path.join(script_dir,"Crystal_Pictures")
+icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
+splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
+crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
+CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
+Crystal_Sendoff = os.path.join(script_dir,'Resources','Crystal_Sendoff_Sheet.xlsx')
+crystal_screens_path = os.path.join(script_dir,'Resources','Crystal_Screens.json')
+SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
 os.makedirs(crystal_pictures,exist_ok=True)
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
@@ -89,10 +91,10 @@ class CrystalDex_main:
         self.opened_microscope_app = False
 
         #Tkinter initializations
-        root=Tk()
+        root=tk.Tk()
         self.root = root
         self.root.title("CrystalDex")
-        icon = PhotoImage(file=icon_path)
+        icon = tk.PhotoImage(file=icon_path)
         self.root.iconphoto(True,icon)
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
@@ -102,13 +104,13 @@ class CrystalDex_main:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
-        self.selected_condition = StringVar(value='')
+        self.selected_condition = tk.StringVar(value='')
 
         #Box integrations:
         CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
         CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
 
-        def delete_token_files(base_name = 'box_token.json'):
+        def delete_token_files(base_name = 'box_token'):
             for f in glob.glob(base_name+'*'):
                 try:
                     os.remove(f)
@@ -116,7 +118,7 @@ class CrystalDex_main:
                     print(f'Failed to delete {f}: {e}')
 
         def authorize():
-            token_storage = FileTokenStorage(filename='box_token.json')
+            token_storage = FileTokenStorage(filename='box_token')
             config = OAuthConfig(
                 client_id=CLIENT_ID,
                 client_secret=CLIENT_SECRET,
@@ -184,9 +186,9 @@ class CrystalDex_main:
                 file_download = self.client.downloads.download_file(file_id).read()
             
         #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
-        with open("CrystalDex_Library.xlsx","wb") as c:
+        with open(CrystalDex_library,"wb") as c:
             c.write(file_download)
-        self.wb = load_workbook(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+        self.wb = px.load_workbook(filename=os.path.abspath(CrystalDex_library))
         
         #Access Crystal_Sendoff_Sheet:
         file_download = None
@@ -196,9 +198,9 @@ class CrystalDex_main:
         except FileNotFoundError:
             file_id = '1911115194008'
             file_download = self.client.downloads.download_file(file_id).read()
-        with open('Crystal_Sendoff_Sheet.xlsx','wb') as s:
+        with open(Crystal_Sendoff,'wb') as s:
             s.write(file_download)
-        self.sendoff_workbook = load_workbook(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+        self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(Crystal_Sendoff))
         self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
         #Access Crystal_Screens.json:
@@ -211,8 +213,8 @@ class CrystalDex_main:
             pass
         self.crystal_screen_values = []
         self.crystal_screen_symbols = {}
-        if os.path.exists("Crystal_Screens.json"):
-            with open("Crystal_Screens.json", "r") as s:
+        if os.path.exists(crystal_screens_path):
+            with open(crystal_screens_path, "r") as s:
                 self.crystal_screens = json.load(s)
                 for crystal_screen in self.crystal_screens.keys():
                     self.crystal_screen_values.append(crystal_screen)
@@ -221,8 +223,8 @@ class CrystalDex_main:
             pass
 
     def reload_crystal_screens(self):
-        if os.path.exists("Crystal_Screens.json"):
-            with open("Crystal_Screens.json", "r") as s:
+        if os.path.exists(crystal_screens_path):
+            with open(crystal_screens_path, "r") as s:
                 self.crystal_screens = json.load(s)
                 #print(self.crystal_screens)
 
@@ -253,13 +255,13 @@ class CrystalDex_main:
                     ws = self.wb[ws_title]
                     cell_id = self.picture_upload_filenames.get(image_filename)[1]
                     ws[cell_id].hyperlink = shared_link_url
-                    self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+                    self.wb.save(filename=os.path.abspath(CrystalDex_library))
                     if 'harvested' in image_filename:
                         for x in range(2,300):
                             cell_id = f'B{x}'
                             if self.sendoff_sheet[cell_id] == image_filename:
                                 self.sendoff_sheet[cell_id].hyperlink = shared_link_url
-                    self.sendoff_workbook.save(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+                    self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
 
         #The following command uploads the Crystal Trays Library
         self.client.uploads.upload_file_version(
@@ -267,7 +269,7 @@ class CrystalDex_main:
                 name="CrystalDex_Library.xlsx",
                 id="328850485682"),
                 file_id="1911115179608",
-                file=open(os.path.abspath("CrystalDex_Library.xlsx"),"rb"
+                file=open(os.path.abspath(CrystalDex_library),"rb"
                 )
             )
         
@@ -277,7 +279,7 @@ class CrystalDex_main:
                 name="Crystal_Screens.json",
                 id="328850485682"),
                 file_id="1911117169207",
-                file=open(os.path.abspath("Crystal_Screens.json"),"rb"
+                file=open(os.path.abspath(crystal_screens_path),"rb"
                 )
             )
         
@@ -287,7 +289,7 @@ class CrystalDex_main:
                 name="Crystal_Sendoff_Sheet.xlsx",
                 id="328850485682"),
                 file_id="1911117898957",
-                file=open(os.path.abspath("Crystal_Sendoff_Sheet.xlsx"),"rb"
+                file=open(os.path.abspath(Crystal_Sendoff),"rb"
                 )
             )
         if self.splash_win.winfo_exists:
@@ -296,19 +298,19 @@ class CrystalDex_main:
             self.root.after(0,self.startup)        
 
     def splash(self):
-        self.splash_win = Toplevel(self.root)
+        self.splash_win = tk.Toplevel(self.root)
         self.splash_win.overrideredirect(True)
         self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-590//2}')
-        self.splash_image = PhotoImage(file=splash_path)
-        Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
+        self.splash_image = tk.PhotoImage(file=splash_path)
+        ttk.Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
         self.splash_win.attributes('-topmost',True)
 
     def load_SeBaView(self):
         """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
-        software and simulate the correct button presses, but that is currently beyond the scope of this project."""
+        software and simulate the correct tk.Button presses, but that is currently beyond the scope of this project."""
         exe_path = None
-        if os.path.exists("SeBaView_path_file.json"):
-            with open("SeBaView_path_file.json", "r") as s:
+        if os.path.exists(SeBaView_path):
+            with open(SeBaView_path, "r") as s:
                 exe_path = json.load(s).get("SeBaView_path")
         if not exe_path or not os.path.exists(exe_path):
             # Ask user to locate it if not found or invalid
@@ -317,23 +319,19 @@ class CrystalDex_main:
                 filetypes=[("Executable files", "*.exe")]
             )
         if exe_path:
-            with open("SeBaView_path_file.json", "w") as s:
+            with open(SeBaView_path, "w") as s:
                 json.dump({"SeBaView_path": exe_path}, s)
             self.SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(6)
-            #for i, w in enumerate(self.SeBaView.windows()):
-            #    print(f'[{i}] Title: {w.window_text()}')
+            time.sleep(4)
             try:
-                # Try to wait for the first active window
                 SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
-                #timings.wait_until_passes(15, 1, lambda: main_window.exists() and main_window.is_visible())
                 self.SeBaView_wrapper = SeBaView_main_window.wrapper_object()
                 self.SeBaView_wrapper.maximize()
                 self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
                 self.SeBaView_wrapper.set_focus()
                 time.sleep(0.1)
                 for i in range(2):
-                    self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting button.
+                    self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting tk.Button.
                 self.SeBaView_wrapper.minimize()
                 self.opened_microscope_app = True
             except Exception as e:
@@ -356,21 +354,21 @@ class CrystalDex_main:
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
         self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
-        startup.option_add('*tearOFF',FALSE)
+        startup.option_add('*tearOFF',tk.FALSE)
         startup.grid(column=0,row=0,sticky='N,E,S,W')
-        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a button placed inside it.
+        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
         #https://tkdocs.com/tutorial/text.html#basics
-        ttk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky=(N,E,S,W))
-        ttk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky=(N,E,S,W))
+        tk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
 
         for i in range(2):
             self.refocus()
         self.root.mainloop() #This has to be the last line of code in the startup function (it can't be placed anywhere before SeBaView is loaded)
 
     def add_menu(self):
-        menu = Menu(self.root)
+        menu = tk.Menu(self.root)
         menu.add_command(label='Home',command=self.startup)
         menu.add_command(label="Help",command=self.Help)
         self.root.config(menu=menu)
@@ -386,17 +384,17 @@ class CrystalDex_main:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         helpframe = ttk.Frame(self.root,padding='3 3 12 12')
-        helpframe.grid(column=0,row=0,sticky=(N,W,E,S))
-        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky=(N,E,W))
+        helpframe.grid(column=0,row=0,sticky='N,W,E,S')
+        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
         helptext = "This program functions by accessing Box and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
-        ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky=(N,E,W))
+        ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky='N,E,W')
         self.refocus()
 
     def New_Tray(self):
         self.clear_widgets()
         self.add_menu()
         new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        new_tray_frame.grid(column=0,row=0,sticky=(N,W))
+        new_tray_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
 
@@ -404,63 +402,63 @@ class CrystalDex_main:
 
         date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))] #Replace with code that accesses a page in an excel workbook that contains the date_set_values of each tray in the CrystalDex.
         today_label = ttk.Label(new_tray_frame,text="Today?")
-        today_label.grid(column=3,row=5,sticky=(N,W))
-        today_var = BooleanVar()
-        ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False).grid(column=4,row=5,sticky=(N,W))
+        today_label.grid(column=3,row=5,sticky='N,W')
+        today_var = tk.BooleanVar()
+        ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False).grid(column=4,row=5,sticky='N,W')
         date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
-        date_set_label.grid(column=1,row=5,sticky=(N,W))
-        date_set_var = StringVar()
+        date_set_label.grid(column=1,row=5,sticky='N,W')
+        date_set_var = tk.StringVar()
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
         date_set_drop_down.grid(column=2,row=5)
 
         chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
-        chaperone_label.grid(column=1,row=6,sticky=(N,W))
-        chaperone_var = StringVar()
+        chaperone_label.grid(column=1,row=6,sticky='N,W')
+        chaperone_var = tk.StringVar()
         chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=chaperone_var,values=self.chaperone_values)
         chaperone_drop_down.grid(column=2,row=6)
 
         crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
-        crystal_screen_label.grid(column=1,row=7,sticky=(N,W))
-        crystal_screen_var = StringVar()
+        crystal_screen_label.grid(column=1,row=7,sticky='N,W')
+        crystal_screen_var = tk.StringVar()
         crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=self.crystal_screen_values)
         crystal_screen_drop_down.grid(column=2,row=7)
 
         target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
         target_protein_label = ttk.Label(new_tray_frame,text="Target Protein (required):")
-        target_protein_label.grid(column=1,row=8,sticky=(N,W))
-        target_protein_var = StringVar()
+        target_protein_label.grid(column=1,row=8,sticky='N,W')
+        target_protein_var = tk.StringVar()
         target_protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_var,values=target_protein_values)
-        target_protein_drop_down.grid(column=2,row=8,sticky=(N,W))
+        target_protein_drop_down.grid(column=2,row=8,sticky='N,W')
 
         target_protein_stock_concentration_values = ['1','5','15','20']
         target_protein_top_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
-        target_protein_top_left_stock_concentration_label.grid(column=1,row=9,sticky=(N,W))
-        target_protein_top_left_stock_concentration_var = StringVar()
+        target_protein_top_left_stock_concentration_label.grid(column=1,row=9,sticky='N,W')
+        target_protein_top_left_stock_concentration_var = tk.StringVar()
         target_protein_top_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_left_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_top_left_stock_concentration_drop_down.grid(column=2,row=9,sticky=(N,W))
+        target_protein_top_left_stock_concentration_drop_down.grid(column=2,row=9,sticky='N,W')
 
         target_protein_top_right_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top right subwell (required):")
-        target_protein_top_right_stock_concentration_label.grid(column=1,row=10,sticky=(N,W))
-        target_protein_top_right_stock_concentration_var = StringVar()
+        target_protein_top_right_stock_concentration_label.grid(column=1,row=10,sticky='N,W')
+        target_protein_top_right_stock_concentration_var = tk.StringVar()
         target_protein_top_right_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_right_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_top_right_stock_concentration_drop_down.grid(column=2,row=10,sticky=(N,W))
+        target_protein_top_right_stock_concentration_drop_down.grid(column=2,row=10,sticky='N,W')
 
         target_protein_bottom_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into bottom left subwell (required):")
-        target_protein_bottom_left_stock_concentration_label.grid(column=1,row=11,sticky=(N,W))
-        target_protein_bottom_left_stock_concentration_var = StringVar()
+        target_protein_bottom_left_stock_concentration_label.grid(column=1,row=11,sticky='N,W')
+        target_protein_bottom_left_stock_concentration_var = tk.StringVar()
         target_protein_bottom_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_bottom_left_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_bottom_left_stock_concentration_drop_down.grid(column=2,row=11,sticky=(N,W))
+        target_protein_bottom_left_stock_concentration_drop_down.grid(column=2,row=11,sticky='N,W')
 
         #Later, if I have time, I'll want to add a little virtual replica in column 3 of a single well (with the four subwells) so that the user can see exactly what they're filling out, and each subwell will have the concentration appear as they fill it in.
 
         custom_tags_values = []
         custom_tags_label = ttk.Label(new_tray_frame,text="Custom Tags (optional; separated by commas, please!):")
-        custom_tags_label.grid(column=1,row=12,sticky=(N,W))
-        custom_tags_var = StringVar()
+        custom_tags_label.grid(column=1,row=12,sticky='N,W')
+        custom_tags_var = tk.StringVar()
         custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
         custom_tags_drop_down.grid(column=2,row=12)
 
-        ttk.Button(new_tray_frame,text="Begin Indexing Tray",
+        tk.Button(new_tray_frame,text="Begin Indexing Tray",
                    command=lambda: self.Index_Tray(
                        str(date_set_var.get()),
                        bool(today_var.get()),
@@ -472,7 +470,7 @@ class CrystalDex_main:
                        str(chaperone_var.get()),
                        str(custom_tags_var.get())
                         )
-                    ).grid(column=1,row=13,sticky=(N,W))
+                    ).grid(column=1,row=13,sticky='N,W')
 
         for child in new_tray_frame.winfo_children():
             child.grid_configure(padx=5,pady=5)
@@ -482,7 +480,7 @@ class CrystalDex_main:
         self.clear_widgets()
         self.add_menu()
         st_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        st_frame.grid(column=0,row=0,sticky=(N,W))
+        st_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         st_name_label = ttk.Label(st_frame,text=(
@@ -490,14 +488,14 @@ class CrystalDex_main:
             '\nPlease review the following to ensure no duplicate trays are indexed!'
         ))
         st_name_label.grid(column=0,row=0)
-        tray_name = StringVar()
+        tray_name = tk.StringVar()
         st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()))
         st_name_combobox.grid(column=0,row=1)
 
         if not self.harvesting:
             none_of_the_above_label = ttk.Label(st_frame,text='If none of the above match your tray, click here:')
             none_of_the_above_label.grid(column=0,row=2)
-            ttk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
+            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
 
         def make_new_tray(short_title):
             shorter_title = short_title
@@ -513,7 +511,7 @@ class CrystalDex_main:
             new_worksheet.title = shorter_title
             self.proceed(self.wb[shorter_title])
 
-        ttk.Button(st_frame,text="Save selection and proceed",
+        tk.Button(st_frame,text="Save selection and proceed",
         command=lambda: self.proceed(self.wb[self.tray_names.get(tray_name.get())])).grid(column=0,row=3)
         self.refocus()
 
@@ -581,7 +579,7 @@ class CrystalDex_main:
                 new_worksheet['H1'] = target_protein_top_left_stock_concentration
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
-                self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+                self.wb.save(filename=os.path.abspath(CrystalDex_library))
                 self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.refocus()
 
@@ -590,7 +588,7 @@ class CrystalDex_main:
         self.add_menu()
         self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
         subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        subwell_frame.grid(column=0,row=0,sticky=(N,W))
+        subwell_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.refocus()
@@ -601,70 +599,70 @@ class CrystalDex_main:
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
         well_row_label.grid(column=1,row=2)
         well_row_values = ['A','B','C','D','E','F','G','H']
-        well_row_var = StringVar()
+        well_row_var = tk.StringVar()
         well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row_var,values=well_row_values)
         well_row_drop_down.grid(column=2,row=2)
 
         well_column_label = ttk.Label(subwell_frame,text="Well column:")
         well_column_label.grid(column=1,row=3)
         well_column_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
-        well_column_var = StringVar()
+        well_column_var = tk.StringVar()
         well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
         well_column_drop_down.grid(column=2,row=3)
 
         subwell_values = ['top_left','top_right','bottom_left']
         subwell_label = ttk.Label(subwell_frame,text="subwell:")
         subwell_label.grid(column=1,row=4)
-        subwell_var = StringVar()
+        subwell_var = tk.StringVar()
         subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
         subwell_drop_down.grid(column=2,row=4)
 
-        crystal_width_var = StringVar()
+        crystal_width_var = tk.StringVar()
         crystal_width_label = ttk.Label(subwell_frame,text='crystal width:')
         crystal_width_label.grid(column=1,row=5)
-        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width_var,state=DISABLED)
+        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width_var,state=tk.DISABLED)
         crystal_width_entry.grid(column=2,row=5)
         um_width_label = ttk.Label(subwell_frame,text='um')
         um_width_label.grid(column=3,row=5)
 
-        crystal_height_var = StringVar()
+        crystal_height_var = tk.StringVar()
         crystal_height_label = ttk.Label(subwell_frame,text='crystal height:')
         crystal_height_label.grid(column=1,row=6)
-        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height_var,state=DISABLED)
+        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height_var,state=tk.DISABLED)
         crystal_height_entry.grid(column=2,row=6)
         um_row_label = ttk.Label(subwell_frame,text='um')
         um_row_label.grid(column=3,row=6)
 
         number_of_crystals_label = ttk.Label(subwell_frame,text='# of harvestable crystals (optional):')
         number_of_crystals_label.grid(column=1,row=7)
-        number_of_crystals_var = StringVar()
+        number_of_crystals_var = tk.StringVar()
         number_of_crystals_entry = ttk.Spinbox(subwell_frame,from_=0,to=100,textvariable=number_of_crystals_var)
         number_of_crystals_entry.grid(column=2,row=7)
 
         shape_label = ttk.Label(subwell_frame,text='Shape of crystals:')
         shape_label.grid(column=1,row=8)
-        shape_var = StringVar()
+        shape_var = tk.StringVar()
         shape_entry = ttk.Entry(subwell_frame,textvariable=shape_var)
         shape_entry.grid(column=2,row=8)
 
         possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
         possible_salt_crystals_label.grid(column=1,row=9)
-        possible_salt_crystals_var = BooleanVar()
+        possible_salt_crystals_var = tk.BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var,onvalue=True,offvalue=False).grid(column=2,row=9)
 
         precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
         precipitation_label.grid(column=1,row=10)
-        precipitation_var = BooleanVar()
+        precipitation_var = tk.BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=precipitation_var,onvalue=True,offvalue=False).grid(column=2,row=10)
 
         microcrystals_label = ttk.Label(subwell_frame,text="Microcrystals present")
         microcrystals_label.grid(column=1,row=11)
-        microcrystals_var = BooleanVar()
+        microcrystals_var = tk.BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=microcrystals_var,onvalue=True,offvalue=False).grid(column=2,row=11)
 
         glassy_protein_or_artifacts_label = ttk.Label(subwell_frame,text="Glassy protein or artifacts present")
         glassy_protein_or_artifacts_label.grid(column=1,row=12)
-        glassy_protein_or_artifacts_var = BooleanVar()
+        glassy_protein_or_artifacts_var = tk.BooleanVar()
         ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=12)
 
         now = datetime.now()
@@ -675,7 +673,7 @@ class CrystalDex_main:
             x = 2
             harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
             harvester_label.grid(column=1,row=13)
-            harvester_var = StringVar()
+            harvester_var = tk.StringVar()
             harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester_var)
             harvester_entry.grid(column=2,row=13)
 
@@ -689,24 +687,24 @@ class CrystalDex_main:
                     vials_available.append(str(y))
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
-            vial_var = StringVar()
+            vial_var = tk.StringVar()
             vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial_var,values=vials_available)
             vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
         notes_label.grid(column=1,row=13+x)
-        notes = Text(subwell_frame, width = 50, height = 5)
+        notes = tk.Text(subwell_frame, width = 50, height = 5)
         notes.grid(column=1,row=14+x,columnspan=2)
 
         def update_crystal_size_vars():
             crystal_width_var.set(f'{self.crystal_size[0]}')
             crystal_height_var.set(f'{self.crystal_size [1]}')
 
-        ttk.Button(subwell_frame,text ='Measure Crystal',
+        tk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
 
         if self.harvesting:
-            ttk.Button(subwell_frame,text='Harvest crystal',
+            tk.Button(subwell_frame,text='Harvest crystal',
                     command=lambda: self.take_picture(
                         ws,
                         chaperone,
@@ -723,12 +721,12 @@ class CrystalDex_main:
                         bool(glassy_protein_or_artifacts_var.get()),
                         date_set,
                         date_snapped,
-                        notes.get(1.0,END),
+                        notes.get(1.0,tk.END),
                         vial=str(vial_var.get()),
                         harvester = str(harvester_var.get())
                     )).grid(column=1,row=16+x)
         else:
-            ttk.Button(subwell_frame,text='Take and save picture',
+            tk.Button(subwell_frame,text='Take and save picture',
                     command=lambda: self.take_picture(
                         ws,
                         chaperone,
@@ -745,10 +743,10 @@ class CrystalDex_main:
                         bool(glassy_protein_or_artifacts_var.get()),
                         date_set,
                         date_snapped,
-                        notes.get(1.0,END)
+                        notes.get(1.0,tk.END)
                     )).grid(column=1,row=16+x)
 
-        ttk.Button(subwell_frame,text="Done with this tray",
+        tk.Button(subwell_frame,text="Done with this tray",
                    command=lambda: self.Box_Save()).grid(column=1,row=17+x)
         
         for child in subwell_frame.winfo_children():
@@ -794,10 +792,10 @@ class CrystalDex_main:
 
         def take_take_picture():
             self.SeBaView_wrapper.set_focus()
-            self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as button.
+            self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
             time.sleep(1)
             for i in range(2):
-                self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
+                self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
             row = well_to_excel_dict.get(well_row)
             column = well_to_excel_dict.get(well_column)
@@ -819,7 +817,7 @@ class CrystalDex_main:
                 picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
                 picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
                 
-            self.wb.save(filename=os.path.abspath("CrystalDex_Library.xlsx"))
+            self.wb.save(filename=os.path.abspath(CrystalDex_library))
 
             for filename in os.listdir(desktop):
                 file_path = os.path.join(desktop, filename)
@@ -852,29 +850,29 @@ class CrystalDex_main:
                 crystal_cell.offset(row=0,column=5).value = harvester
                 crystal_cell.offset(row=0,column=6).value = f'{date_set}, {date_snapped}' #date_set and date_harvested are passed from identify_subwell 
                 crystal_cell.offset(row=0,column=7).value = notes
-                self.sendoff_workbook.save(filename=os.path.abspath('Crystal_Sendoff_Sheet.xlsx'))
+                self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
 
         self.refocus()
 
     def measure_crystal(self,function_to_run):
-        """This is one of the best features of CrystalDex! However, it does need a calibrate button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
+        """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
         """
         self.crystal_size = [0,0]
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
-            self.measure_tool_window = Toplevel(self.root)
+            self.measure_tool_window = tk.Toplevel(self.root)
         else:
-            self.measure_tool_window = Toplevel(self.root)
-        icon = PhotoImage(file=icon_path)
+            self.measure_tool_window = tk.Toplevel(self.root)
+        icon = tk.PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
         self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
         self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
-        self.measure_tool_window.resizable(FALSE,FALSE)
+        self.measure_tool_window.resizable(tk.FALSE,tk.FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
-        measure_tool = Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
+        measure_tool = tk.Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
         measure_tool.pack(fill='both',expand=True)
         self.mouse_pressed = False
         self.line_start = None
@@ -935,22 +933,22 @@ class CrystalDex_main:
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
         upload_crystal_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        upload_crystal_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+        upload_crystal_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
         
         crystal_screen_name_label = ttk.Label(upload_crystal_screen_frame,text='Enter the name of the new crystal screen:')
         crystal_screen_name_label.grid(row=0,column=0)
-        crystal_screen_name = StringVar()
+        crystal_screen_name = tk.StringVar()
         crystal_screen_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_name)
         crystal_screen_entry.grid(row=0,column=1)
 
         crystal_screen_symbol_label = ttk.Label(upload_crystal_screen_frame,text='Enter 2-letter symbol for new screen:')
         crystal_screen_symbol_label.grid(row=0,column=2)
-        crystal_screen_symbol = StringVar()
+        crystal_screen_symbol = tk.StringVar()
         crystal_screen_symbol_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_symbol)
         crystal_screen_symbol_entry.grid(row=0,column=3)
 
-        upload_crystal_screen_button = ttk.Button(upload_crystal_screen_frame,text=f"Upload {self.not_first}crystal screen",command=lambda: scrape_crystal_screen_data())
-        upload_crystal_screen_button.grid(column=4,row=0,sticky=(N,W))
+        upload_crystal_screen_button = tk.Button(upload_crystal_screen_frame,text=f"Upload {self.not_first}crystal screen",command=lambda: scrape_crystal_screen_data())
+        upload_crystal_screen_button.grid(column=4,row=0,sticky='N,W')
         upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
 
         conditions = ['' for _ in range(96)]
@@ -966,7 +964,7 @@ class CrystalDex_main:
                     text += page.extract_text() + "\n"
 
                 if not any(keyword in text for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                    print(f"No text found. If you're trying to use Make Tray from Hampton, use the Optimization button on the home screen instead.")
+                    print(f"No text found. If you're trying to use Make Tray from Hampton, use the Optimization tk.Button on the home screen instead.")
 
             last_condition = 0
             offset = 0
@@ -995,18 +993,18 @@ class CrystalDex_main:
                     elif reading and line.startswith(f'{next_condition}.'):
                         reading = False
 
-            listbox_label = Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
+            listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
             listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
-            condition_var = StringVar(value=listbox_values)
-            conditions_listbox = Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
+            condition_var = tk.StringVar(value=listbox_values)
+            conditions_listbox = tk.Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
             
-            edited_condition = StringVar()
-            condition_entry = Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
+            edited_condition = tk.StringVar()
+            condition_entry = tk.Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
             condition_entry.grid(row=4, column=0, columnspan=3)
 
-            selected_index = IntVar(value=-1)
+            selected_index = tk.IntVar(value=-1)
 
             def select_condition(event):
                 selection = conditions_listbox.curselection()
@@ -1032,16 +1030,16 @@ class CrystalDex_main:
                     else:
                         edited_condition.set(f'{conditions[0]}')
                     
-            Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
+            tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
             def save():
                 self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
-                with open("Crystal_Screens.json", "w") as c:
+                with open(crystal_screens_path, "w") as c:
                     json.dump(self.crystal_screens, c)
                 self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
                 self.Box_Save()
             
-            Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
+            tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
     def Optimization_Screen(self):
         """Allows users to either create a custom optimization screen (while optionally looking up a reference condition from any of the screens
@@ -1056,23 +1054,23 @@ class CrystalDex_main:
         self.reload_crystal_screens()
         self.crystal_screen = None
         conditions = ['' for _ in range(96)]
-        selected_index = IntVar(value=-1)
+        selected_index = tk.IntVar(value=-1)
         self.quad = 1
 
-        Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
+        ttk.Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
         'this is often one of the most defining characteristics of any tray/screen and helps to avoid duplicate names.',justify='left').grid(column=0,row=0,columnspan=2)
 
-        Label(optimization_screen_frame,text='Complete name of new optimization screen:').grid(row=1,column=0)
-        long_name = StringVar()
-        long_name_entry = Entry(optimization_screen_frame,textvariable=long_name)
+        ttk.Label(optimization_screen_frame,text='Complete name of new optimization screen:').grid(row=1,column=0)
+        long_name = tk.StringVar()
+        long_name_entry = tk.Entry(optimization_screen_frame,textvariable=long_name)
         long_name_entry.grid(row=1,column=1)
 
-        Label(optimization_screen_frame,text='Two-character code for optimization screen:').grid(row=2,column=0)
-        two_code = StringVar()
-        two_code_entry = Entry(optimization_screen_frame,textvariable=two_code)
+        ttk.Label(optimization_screen_frame,text='Two-character code for optimization screen:').grid(row=2,column=0)
+        two_code = tk.StringVar()
+        two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
-        Button(optimization_screen_frame,text='Continue',command=lambda: select_type(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
+        tk.Button(optimization_screen_frame,text='Continue',command=lambda: select_type(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
 
         def select_type(long_name,two_code):
             self.long_name = long_name
@@ -1083,35 +1081,35 @@ class CrystalDex_main:
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
             optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
-            Label(optimization_screen_frame,text='Use Make Tray by Hampton and enter your desired condition(s) to generate a list of optimization conditions').grid(column=0,row=0)
-            Button(optimization_screen_frame,text='Go',command=lambda: show_entry_fields(make_tray_copy=True)).grid(row=0,column=1,sticky='N,W')
+            ttk.Label(optimization_screen_frame,text='Use Make Tray by Hampton and enter your desired condition(s) to generate a list of optimization conditions').grid(column=0,row=0)
+            tk.Button(optimization_screen_frame,text='Go',command=lambda: show_entry_fields(make_tray_copy=True)).grid(row=0,column=1,sticky='N,W')
 
-            Label(optimization_screen_frame,text='Or for complete manual input, look up a reference condition from a screen in CrystalDex').grid(column=0,row=1,sticky='N,W')
-            Button(optimization_screen_frame,text='Look up',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=1,column=1,sticky='N,W')
+            ttk.Label(optimization_screen_frame,text='Or for complete manual input, look up a reference condition from a screen in CrystalDex').grid(column=0,row=1,sticky='N,W')
+            tk.Button(optimization_screen_frame,text='Look up',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=1,column=1,sticky='N,W')
 
         def show_entry_fields(make_tray_copy):
             self.clear_widgets()
             self.add_menu()
             self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-            optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+            optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
             if not make_tray_copy:
                 def choose_ref():
                     for crystal_screen in self.crystal_screens.keys():
                         self.crystal_screen_values.append(crystal_screen)
                         self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-                        crystal_screens_label = Label(optimization_screen_frame,text='Available screens:')
+                        crystal_screens_label = ttk.Label(optimization_screen_frame,text='Available screens:')
                         crystal_screens_label.grid(row=1,column=0)
-                        crystal_screen_var = StringVar(value=self.crystal_screen_values)
-                        crystal_screens_listbox = Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
+                        crystal_screen_var = tk.StringVar(value=self.crystal_screen_values)
+                        crystal_screens_listbox = tk.Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
                         crystal_screens_listbox.grid(row=2,column=0)
                     def select_and_continue():
                         lookup_conditions = []
                         for condition in self.crystal_screens.get(crystal_screen):
                             lookup_conditions.append(condition)
-                        lookup_conditions_var = StringVar(value=lookup_conditions)
+                        lookup_conditions_var = tk.StringVar(value=lookup_conditions)
                         self.crystal_screen = crystal_screen_var.get()
-                        lookup_listbox = Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
+                        lookup_listbox = tk.Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
                         lookup_listbox.grid(row=0,column=1,columnspan=4,rowspan=3)
 
                         def select_condition_to_optimize(event):
@@ -1125,96 +1123,96 @@ class CrystalDex_main:
                                 self.add_menu()
                                 self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
                                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                                optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+                                optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
                                 show_entry_fields(make_tray_copy=make_tray_copy)
 
                         lookup_listbox.bind('<<ListboxSelect>>',select_condition_to_optimize)
 
-                    Button(optimization_screen_frame,text='Select crystal screen and continue',command=select_and_continue).grid(row=3,column=0)
+                    tk.Button(optimization_screen_frame,text='Select crystal screen and continue',command=select_and_continue).grid(row=3,column=0)
 
                 if self.selected_condition.get() =='':
                     choose_ref()
                 else:
-                    reference_label = Label(optimization_screen_frame,text=f'Reference condition: {self.selected_condition.get()}')
+                    reference_label = ttk.Label(optimization_screen_frame,text=f'Reference condition: {self.selected_condition.get()}')
                     reference_label.grid(row=0,column=0)
 
-                    Button(optimization_screen_frame,text='Look up new reference',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=0,column=1,sticky='N,W')
+                    tk.Button(optimization_screen_frame,text='Look up new reference',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=0,column=1,sticky='N,W')
 
-                    Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=5,column=0,columnspan=5,sticky='N,W')
-                    Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0,columnspan=5,sticky='N,W')
+                    ttk.Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=5,column=0,columnspan=5,sticky='N,W')
+                    ttk.Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0,columnspan=5,sticky='N,W')
 
-                    Label(optimization_screen_frame,text='Steps (optional, default is 1):').grid(row=8,column=0)
-                    steps_var = StringVar()
-                    steps_entry = Entry(optimization_screen_frame,textvariable=steps_var)
+                    ttk.Label(optimization_screen_frame,text='Steps (optional, default is 1):').grid(row=8,column=0)
+                    steps_var = tk.StringVar()
+                    steps_entry = tk.Entry(optimization_screen_frame,textvariable=steps_var)
                     steps_entry.grid(row=8,column=1)
 
-                    Label(optimization_screen_frame,text='pH Start (leave empty if not tracked):').grid(row=8,column=1)
-                    pH_start_var = StringVar()
-                    pH_start_entry = Entry(optimization_screen_frame,textvariable=pH_start_var)
+                    ttk.Label(optimization_screen_frame,text='pH Start (leave empty if not tracked):').grid(row=8,column=1)
+                    pH_start_var = tk.StringVar()
+                    pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var)
                     pH_start_entry.grid(row=8,column=2)
-                    Label(optimization_screen_frame,text='pH Stop:').grid(row=8,column=3)
-                    pH_stop_var = StringVar()
-                    pH_stop_entry = Entry(optimization_screen_frame,textvariable=pH_stop_var)
+                    ttk.Label(optimization_screen_frame,text='pH Stop:').grid(row=8,column=3)
+                    pH_stop_var = tk.StringVar()
+                    pH_stop_entry = tk.Entry(optimization_screen_frame,textvariable=pH_stop_var)
                     pH_stop_entry.grid(row=8,column=4)
 
-                    Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
-                    buffer_var = StringVar()
-                    buffer_entry = Entry(optimization_screen_frame,textvariable=buffer_var)
+                    ttk.Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
+                    buffer_var = tk.StringVar()
+                    buffer_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_var)
                     buffer_entry.grid(row=9,column=1)
-                    Label(optimization_screen_frame,text='Buffer Concentration Start (Molar):').grid(row=9,column=2)
-                    buffer_start_var = StringVar()
-                    buffer_start_entry = Entry(optimization_screen_frame,textvariable=buffer_start_var)
+                    ttk.Label(optimization_screen_frame,text='Buffer Concentration Start (Molar):').grid(row=9,column=2)
+                    buffer_start_var = tk.StringVar()
+                    buffer_start_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_start_var)
                     buffer_start_entry.grid(row=9,column=3)
-                    Label(optimization_screen_frame,text='Buffer Concentration Stop (normally same as Start):').grid(row=9,column=4)
-                    buffer_stop_var = StringVar()
-                    buffer_stop_entry = Entry(optimization_screen_frame,textvariable=buffer_stop_var)
+                    ttk.Label(optimization_screen_frame,text='Buffer Concentration Stop (normally same as Start):').grid(row=9,column=4)
+                    buffer_stop_var = tk.StringVar()
+                    buffer_stop_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_stop_var)
                     buffer_stop_entry.grid(row=9,column=5)
-                    buffer_weight_percent_var = BooleanVar(value=False)
-                    buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
+                    buffer_weight_percent_var = tk.BooleanVar(value=False)
+                    buffer_weight_percent_checkbutton = tk.Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
                     buffer_weight_percent_checkbutton.grid(row=9,column=6)
 
-                    Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
-                    ingredient1_var = StringVar()
-                    ingredient1_entry = Entry(optimization_screen_frame,textvariable=ingredient1_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
+                    ingredient1_var = tk.StringVar()
+                    ingredient1_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_var)
                     ingredient1_entry.grid(row=10,column=1)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=10,column=2)
-                    ingredient1_start_var = StringVar()
-                    ingredient1_start_entry = Entry(optimization_screen_frame,textvariable=ingredient1_start_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=10,column=2)
+                    ingredient1_start_var = tk.StringVar()
+                    ingredient1_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_start_var)
                     ingredient1_start_entry.grid(row=10,column=3)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=10,column=4)
-                    ingredient1_stop_var = StringVar()
-                    ingredient1_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient1_stop_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=10,column=4)
+                    ingredient1_stop_var = tk.StringVar()
+                    ingredient1_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_stop_var)
                     ingredient1_stop_entry.grid(row=10,column=5)
 
-                    Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
-                    ingredient2_var = StringVar()
-                    ingredient2_entry = Entry(optimization_screen_frame,textvariable=ingredient2_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
+                    ingredient2_var = tk.StringVar()
+                    ingredient2_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_var)
                     ingredient2_entry.grid(row=11,column=1)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=11,column=2)
-                    ingredient2_start_var = StringVar()
-                    ingredient2_start_entry = Entry(optimization_screen_frame,textvariable=ingredient2_start_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=11,column=2)
+                    ingredient2_start_var = tk.StringVar()
+                    ingredient2_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_start_var)
                     ingredient2_start_entry.grid(row=11,column=3)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=11,column=4)
-                    ingredient2_stop_var = StringVar()
-                    ingredient2_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient2_stop_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=11,column=4)
+                    ingredient2_stop_var = tk.StringVar()
+                    ingredient2_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_stop_var)
                     ingredient2_stop_entry.grid(row=11,column=5)
 
-                    Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
-                    ingredient3_var = StringVar()
-                    ingredient3_entry = Entry(optimization_screen_frame,textvariable=ingredient3_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
+                    ingredient3_var = tk.StringVar()
+                    ingredient3_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_var)
                     ingredient3_entry.grid(row=12,column=1)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=12,column=2)
-                    ingredient3_start_var = StringVar()
-                    ingredient3_start_entry = Entry(optimization_screen_frame,textvariable=ingredient3_start_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=12,column=2)
+                    ingredient3_start_var = tk.StringVar()
+                    ingredient3_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_start_var)
                     ingredient3_start_entry.grid(row=12,column=3)
-                    Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=12,column=4)
-                    ingredient3_stop_var = StringVar()
-                    ingredient3_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient3_stop_var)
+                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=12,column=4)
+                    ingredient3_stop_var = tk.StringVar()
+                    ingredient3_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_stop_var)
                     ingredient3_stop_entry.grid(row=12,column=5)
                     
-                    conditions_var = StringVar(value=conditions)
-                    self.selected_condition = StringVar()
-                    conditions_listbox = Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
+                    conditions_var = tk.StringVar(value=conditions)
+                    self.selected_condition = tk.StringVar()
+                    conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
                     conditions_listbox.grid(row=13,column=0,columnspan=3)
 
                     new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get()],[buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get(),buffer_weight_percent_var.get()]]
@@ -1258,9 +1256,9 @@ class CrystalDex_main:
                                     conditions_listbox.delete(condition)
                                     conditions_listbox.insert(condition, conditions[condition])
                     
-                    Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
+                    tk.Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
 
-                    Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=51,column=0)
+                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=51,column=0)
 
             elif make_tray_copy:
                 w = 8
@@ -1270,92 +1268,92 @@ class CrystalDex_main:
                 self.refocus()
                 self.root.geometry(f'{self.screen_width//2}x{self.screen_height}+0+0')#Not sure why this line doesn't work
                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))#the full sticky means this fills the master frame.
-                Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible.").grid(row=5,column=0,columnspan=5,sticky='N,W')
+                optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')#the full sticky means this fills the master frame.
+                ttk.Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible.").grid(row=5,column=0,columnspan=5,sticky='N,W')
 
-                Label(optimization_screen_frame,text='Lowest pH (leave empty if not tracked):').grid(row=8,column=1)
-                pH_start_var = StringVar()
-                pH_start_entry = Entry(optimization_screen_frame,textvariable=pH_start_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Lowest pH (leave empty if not tracked):').grid(row=8,column=1)
+                pH_start_var = tk.StringVar()
+                pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var,width=w)
                 pH_start_entry.grid(row=8,column=2)
-                Label(optimization_screen_frame,text='Highest pH:').grid(row=8,column=3)
-                pH_stop_var = StringVar()
-                pH_stop_entry = Entry(optimization_screen_frame,textvariable=pH_stop_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Highest pH:').grid(row=8,column=3)
+                pH_stop_var = tk.StringVar()
+                pH_stop_entry = tk.Entry(optimization_screen_frame,textvariable=pH_stop_var,width=w)
                 pH_stop_entry.grid(row=8,column=4)
 
-                Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
-                buffer_var = StringVar()
-                buffer_entry = Entry(optimization_screen_frame,textvariable=buffer_var)
+                ttk.Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
+                buffer_var = tk.StringVar()
+                buffer_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_var)
                 buffer_entry.grid(row=9,column=1)
-                Label(optimization_screen_frame,text='Lowest Buffer Concentration:').grid(row=9,column=2)
-                buffer_start_var = StringVar()
-                buffer_start_entry = Entry(optimization_screen_frame,textvariable=buffer_start_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Lowest Buffer Concentration:').grid(row=9,column=2)
+                buffer_start_var = tk.StringVar()
+                buffer_start_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_start_var,width=w)
                 buffer_start_entry.grid(row=9,column=3)
-                Label(optimization_screen_frame,text='Highest Buffer Concentration (normally same as lowest):').grid(row=9,column=4)
-                buffer_stop_var = StringVar()
-                buffer_stop_entry = Entry(optimization_screen_frame,textvariable=buffer_stop_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Highest Buffer Concentration (normally same as lowest):').grid(row=9,column=4)
+                buffer_stop_var = tk.StringVar()
+                buffer_stop_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_stop_var,width=w)
                 buffer_stop_entry.grid(row=9,column=5)
-                buffer_weight_percent_var = BooleanVar(value=False)
-                buffer_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
+                buffer_weight_percent_var = tk.BooleanVar(value=False)
+                buffer_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
                 buffer_weight_percent_checkbutton.grid(row=9,column=6)
 
-                Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
-                ingredient1_var = StringVar()
-                ingredient1_entry = Entry(optimization_screen_frame,textvariable=ingredient1_var)
+                ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
+                ingredient1_var = tk.StringVar()
+                ingredient1_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_var)
                 ingredient1_entry.grid(row=10,column=1)
-                Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=10,column=2)
-                ingredient1_start_var = StringVar()
-                ingredient1_start_entry = Entry(optimization_screen_frame,textvariable=ingredient1_start_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=10,column=2)
+                ingredient1_start_var = tk.StringVar()
+                ingredient1_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_start_var,width=w)
                 ingredient1_start_entry.grid(row=10,column=3)
-                Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=10,column=4)
-                ingredient1_stop_var = StringVar()
-                ingredient1_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient1_stop_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=10,column=4)
+                ingredient1_stop_var = tk.StringVar()
+                ingredient1_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_stop_var,width=w)
                 ingredient1_stop_entry.grid(row=10,column=5)
-                ingredient1_weight_percent_var = BooleanVar(value=False)
-                ingredient1_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient1_weight_percent_var,offvalue=False,onvalue=True)
+                ingredient1_weight_percent_var = tk.BooleanVar(value=False)
+                ingredient1_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient1_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient1_weight_percent_checkbutton.grid(row=10,column=7)
 
-                Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
-                ingredient2_var = StringVar()
-                ingredient2_entry = Entry(optimization_screen_frame,textvariable=ingredient2_var)
+                ttk.Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
+                ingredient2_var = tk.StringVar()
+                ingredient2_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_var)
                 ingredient2_entry.grid(row=11,column=1)
-                Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=11,column=2)
-                ingredient2_start_var = StringVar()
-                ingredient2_start_entry = Entry(optimization_screen_frame,textvariable=ingredient2_start_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=11,column=2)
+                ingredient2_start_var = tk.StringVar()
+                ingredient2_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_start_var,width=w)
                 ingredient2_start_entry.grid(row=11,column=3)
-                Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=11,column=4)
-                ingredient2_stop_var = StringVar()
-                ingredient2_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient2_stop_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=11,column=4)
+                ingredient2_stop_var = tk.StringVar()
+                ingredient2_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_stop_var,width=w)
                 ingredient2_stop_entry.grid(row=11,column=5)
-                ingredient2_weight_percent_var = BooleanVar(value=False)
-                ingredient2_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient2_weight_percent_var,offvalue=False,onvalue=True)
+                ingredient2_weight_percent_var = tk.BooleanVar(value=False)
+                ingredient2_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient2_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient2_weight_percent_checkbutton.grid(row=11,column=7)
 
-                Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
-                ingredient3_var = StringVar()
-                ingredient3_entry = Entry(optimization_screen_frame,textvariable=ingredient3_var)
+                ttk.Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
+                ingredient3_var = tk.StringVar()
+                ingredient3_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_var)
                 ingredient3_entry.grid(row=12,column=1)
-                Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=12,column=2)
-                ingredient3_start_var = StringVar()
-                ingredient3_start_entry = Entry(optimization_screen_frame,textvariable=ingredient3_start_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=12,column=2)
+                ingredient3_start_var = tk.StringVar()
+                ingredient3_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_start_var,width=w)
                 ingredient3_start_entry.grid(row=12,column=3)
-                Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=12,column=4)
-                ingredient3_stop_var = StringVar()
-                ingredient3_stop_entry = Entry(optimization_screen_frame,textvariable=ingredient3_stop_var,width=w)
+                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=12,column=4)
+                ingredient3_stop_var = tk.StringVar()
+                ingredient3_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_stop_var,width=w)
                 ingredient3_stop_entry.grid(row=12,column=5)
-                ingredient3_weight_percent_var = BooleanVar(value=False)
-                ingredient3_weight_percent_checkbutton = Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient3_weight_percent_var,offvalue=False,onvalue=True)
+                ingredient3_weight_percent_var = tk.BooleanVar(value=False)
+                ingredient3_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient3_weight_percent_var,offvalue=False,onvalue=True)
                 ingredient3_weight_percent_checkbutton.grid(row=12,column=7)
                 
-                Label(optimization_screen_frame,text='Virtual Crystal Screen').grid(row=14,column=2,sticky='W,E')
-                vcs = Frame(optimization_screen_frame,width=600,height=400,relief='raised',background='white',border=4,highlightcolor='white')
+                ttk.Label(optimization_screen_frame,text='Virtual Crystal Screen').grid(row=14,column=2,sticky='W,E')
+                vcs = tk.Frame(optimization_screen_frame,width=600,height=400,relief='raised',background='white',border=4,highlightcolor='white')
                 vcs.grid(row=15,column=1,columnspan=6)
-                quad1 = Frame(vcs,width=300,height=200,borderwidth=2,background='blue')
+                quad1 = tk.Frame(vcs,width=300,height=200,borderwidth=2,background='blue')
                 quad1.grid(row=0,column=0)
-                quad2 = Frame(vcs,width=300,height=200,borderwidth=2)
+                quad2 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
                 quad2.grid(row=1,column=0)
-                quad3 = Frame(vcs,width=300,height=200,borderwidth=2)
+                quad3 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
                 quad3.grid(row=0,column=1)
-                quad4 = Frame(vcs,width=300,height=200,borderwidth=2)
+                quad4 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
                 quad4.grid(row=1,column=1)
 
                 new_conditions = ['' for _ in range(96)]
@@ -1430,7 +1428,7 @@ class CrystalDex_main:
                                         conditions[step*8+pH_step+52] = quads[quad][step*4+pH_step]
                         review_make_tray_copy()
 
-                save_condition_settings_button = Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
+                save_condition_settings_button = tk.Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
                 save_condition_settings_button.grid(row=13,column=0)
 
                 def review_make_tray_copy():
@@ -1438,20 +1436,20 @@ class CrystalDex_main:
                     self.add_menu()
                     self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
                     optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                    optimization_screen_frame.grid(column=0,row=0,sticky=(N,W,E,S))
+                    optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
-                    listbox_label = Label(optimization_screen_frame,text='Review and correct generated conditions:')
+                    listbox_label = ttk.Label(optimization_screen_frame,text='Review and correct generated conditions:')
                     listbox_label.grid(row=2,column=0)
                     listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
-                    condition_var = StringVar(value=listbox_values)
-                    conditions_listbox = Listbox(optimization_screen_frame,listvariable=condition_var,height=25,width=150)
+                    condition_var = tk.StringVar(value=listbox_values)
+                    conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=condition_var,height=25,width=150)
                     conditions_listbox.grid(row=3,column=0,columnspan=3)
                     
-                    edited_condition = StringVar()
-                    condition_entry = Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
+                    edited_condition = tk.StringVar()
+                    condition_entry = tk.Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
                     condition_entry.grid(row=4, column=0, columnspan=3)
 
-                    selected_index = IntVar(value=-1)
+                    selected_index = tk.IntVar(value=-1)
 
                     def select_condition(event):
                         selection = conditions_listbox.curselection()
@@ -1477,19 +1475,15 @@ class CrystalDex_main:
                             else:
                                 edited_condition.set(f'{conditions[0]}')
                             
-                    Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
+                    tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
 
-                    Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=5,column=3)
+                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=5,column=3)
 
         def save():
             self.crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
             #print(f'crystal_screens: {self.crystal_screens}')
-            with open("Crystal_Screens.json", "w") as c:
+            with open(crystal_screens_path, "w") as c:
                 json.dump(self.crystal_screens, c)
             self.splash()
             threading.Thread(target=self.Box_Save,daemon=True).start()
             self.startup()
-
-if __name__ == "__main__":
-    app = CrystalDex_main()
-    app.startup()
