@@ -292,10 +292,11 @@ class CrystalDex_main:
                 file=open(os.path.abspath(Crystal_Sendoff),"rb"
                 )
             )
+        #Not sure why, but these few lines aren't working:
         if self.splash_win.winfo_exists:
             self.root.after(0,self.splash_win.destroy)
         else:
-            self.root.after(0,self.startup)        
+            self.startup()
 
     def splash(self):
         self.splash_win = tk.Toplevel(self.root)
