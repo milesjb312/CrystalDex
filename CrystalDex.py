@@ -796,6 +796,7 @@ class CrystalDex_main:
             image_title = image_title+'_harvested'
 
         def take_take_picture():
+            self.SeBaView_wrapper.maximize()
             self.SeBaView_wrapper.set_focus()
             self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
             time.sleep(1)
@@ -865,8 +866,12 @@ class CrystalDex_main:
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
         """
-        self.SeBaView_wrapper.maximize()
-        self.refocus()
+        #Putting in the following lines fixes the geometry problem, but then the computer doesn't let you click anywhere else. How to break out of the tkinter loop and then back in?
+        #self.SeBaView_wrapper.maximize()
+        #self.SeBaView_wrapper.set_focus()
+        #self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
+        #self.refocus()
+
         self.crystal_size = [0,0]
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
@@ -876,7 +881,6 @@ class CrystalDex_main:
         icon = tk.PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
-        self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
         self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(tk.FALSE,tk.FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
