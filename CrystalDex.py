@@ -350,6 +350,7 @@ class CrystalDex_main:
         self.root.destroy()
 
     def startup(self):
+        self.harvesting = False
         if not self.opened_microscope_app:
             self.splash()
             threading.Thread(target=self.load_SeBaView,daemon=True).start()
@@ -362,7 +363,8 @@ class CrystalDex_main:
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
         #https://tkdocs.com/tutorial/text.html#basics
         tk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Edit Tray',command=self.Edit_Tray,width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
 
@@ -811,7 +813,7 @@ class CrystalDex_main:
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
                 row = row+7
             picture_link_cell.value = image_title
-            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,"%m-%d-%Y")-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
+            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,'%m-%d-%Y-%H-%M-%S')-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
             picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
             picture_link_cell.offset(row=3,column=0).value = f'{number_of_crystals}'
             picture_link_cell.offset(row=4,column=0).value = f'{shape}'
@@ -863,6 +865,8 @@ class CrystalDex_main:
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
         """
+        self.SeBaView_wrapper.maximize()
+        self.refocus()
         self.crystal_size = [0,0]
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
@@ -912,6 +916,18 @@ class CrystalDex_main:
                 if callable(function_to_run):
                     function_to_run()
         poll_mouse()
+
+    def Edit_Tray(self):
+        """This is the root method that allows you to index a tray that has already been started."""
+        x = 0
+        for ws in self.wb:
+            x += 1
+            self.tray_names[str(ws['A1'].value)] = ws.title
+        if x>1:
+            self.Select_Tray()
+        else:
+            messagebox.showerror(title='No crystal trays indexed yet...',message=f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
+            self.startup()
 
     def Harvest_Crystals(self):
         """This is the root method that allows you to use the Select_Tray method in the harvesting mode, which forces you to include some types of data, but which also
