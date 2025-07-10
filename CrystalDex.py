@@ -669,7 +669,7 @@ class CrystalDex_main:
         ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=12)
 
         now = datetime.now()
-        date_snapped = now.strftime('%m-%d-%Y')
+        date_snapped = now.strftime('%m-%d-%Y-%H-%M-%S')
 
         x = 0
         if self.harvesting:
