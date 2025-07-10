@@ -827,11 +827,11 @@ class CrystalDex_main:
                 if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
                     try:
                         shutil.move(file_path, crystal_pictures)
-                        self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
+                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
                     except Exception as e:
                         print(f"Failed to move {filename}: {e}")
                         print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                        self.picture_upload_filenames[filename] = [ws.title,f'{row}{column}']
+                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
 
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
