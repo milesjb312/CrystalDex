@@ -975,7 +975,7 @@ class CrystalDex_main:
                     last_condition = condition
                     offset = 1
 
-            for condition in range(95):
+            for condition in range(96):
                 next_condition = str(condition+2)
                 reading = False
                 for line in text.splitlines():
