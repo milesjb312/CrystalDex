@@ -806,8 +806,10 @@ class CrystalDex_main:
             picture_link_cell = ws[f'{column}{row}']
             if subwell=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
+                column = column+2
             elif subwell=='bottom_left':
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
+                row = row+7
             picture_link_cell.value = image_title
             picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,"%m-%d-%Y")-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
             picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
