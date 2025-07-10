@@ -427,7 +427,7 @@ class CrystalDex_main:
         crystal_screen_drop_down.grid(column=2,row=7)
 
         target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
-        target_protein_label = ttk.Label(new_tray_frame,text="Target Protein (required):")
+        target_protein_label = ttk.Label(new_tray_frame,text="Target Protein (For large constructs, include the full name with linkers):")
         target_protein_label.grid(column=1,row=8,sticky='N,W')
         target_protein_var = tk.StringVar()
         target_protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_var,values=target_protein_values)
@@ -496,9 +496,9 @@ class CrystalDex_main:
         st_name_combobox.grid(column=0,row=1)
 
         if not self.harvesting:
-            none_of_the_above_label = ttk.Label(st_frame,text='If none of the above match your tray, click here:')
+            none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
             none_of_the_above_label.grid(column=0,row=2)
-            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2)
+            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2,sticky='W')
 
         def make_new_tray(short_title):
             shorter_title = short_title
