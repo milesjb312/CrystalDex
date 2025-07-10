@@ -19,3 +19,19 @@ Currently, CrystalDex does the following:
         - Uploading the entire workbook and all images into Box.
     2) Generates a Crystal Sendoff sheet during the Harvesting step by:
         - Referencing the internal database containing all conditions, either commercial or optimized and automatically filling out the Crystal Sendoff sheet with all pertinent data, including crystal size and any notes.
+
+If you're wondering about the purposes behind the existence of certain folders/files, here's the reason for each:
+- Crystal_Pictures folder: holds all the crystal pictures and is searched by CrystalDex each time it tries to upload to Box. It is/should be fully mirrored into Box each time CrystalDex tries to upload to Box.
+- Crystal_Screens.json: holds all the information about which conditions apply to which crystal screens/optimization screens and is searched by CrystalDex whenever a Crystal_Sendoff_Sheet is updated.
+- Crystal_Sendoff_Sheet.xlsx: holds information about the current set of crystals to be sent to an X-Ray source. It is updated when users are harvesting crystals and searched whenever CrystalDex uploads to Box.
+- crystaldex_icon.ico: the icon for the app.
+- crystaldex_icon.png: the icon that shows up on the corner of the screen in the GUI
+- CrystalDex_Library_Mastercopy.xlsx: a backup that allows CrystalDex to rewrite the basic format of the CrystalDex library in case it is destroyed or corrupted.
+- CrystalDex_Library.xlsx: an Excel workbook that contains separate worksheets, where each worksheet is a virtual crystal screen with information about the conditions, the date set, and all the crystals imaged so far. It contains links to each image for convenience.
+- CrystalDex_splash.png: the splash image that is shown when CrystalDex is booting up.
+- SeBaView_path_file.json: a file that says where SeBaView is stored on your computer. If it fails, the user is prompted to select the SeBaView application, and the file is overwritten.
+- CrystalDex.gitignore: this file instructs GitHub to ignore the Box user authentication files generated whenever you first use CrystalDex or whenever Box fails to connect.
+- CrystalDex.py: this is where all the code for CrystalDex is stored
+- main.py: this is an entry point for the CrystalDex application, used when PyInstaller is trying to create an executable.
+- main.spec: this file contains specifications for PyInstaller, such as which libraries to download to make a CrystalDex executable operational.
+- requirements.txt: this file isn't used for anything as far as I'm aware, I just generated it using pip > freeze to show what libraries/versions I need to make CrystalDex work.
