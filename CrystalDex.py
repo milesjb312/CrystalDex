@@ -68,6 +68,7 @@ subwell_to_condition_dict = {
 
 well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
 
+#In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
 def on_click(x,y,button,pressed):
     global mouse_is_down
     mouse_is_down = pressed
@@ -229,7 +230,7 @@ class CrystalDex_main:
                 #print(self.crystal_screens)
 
     def refocus(self):
-        #Refocus the window if minimized
+        """Refocus the window if minimized"""
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
@@ -283,6 +284,7 @@ class CrystalDex_main:
                 )
             )
         
+        #The following command uploads the Crystal_Sendoff_Sheet.xlsx
         if self.harvesting:
             self.client.uploads.upload_file_version(
             attributes=box_sdk_gen.UploadFileAttributesParentField(
@@ -301,7 +303,7 @@ class CrystalDex_main:
     def splash(self):
         self.splash_win = tk.Toplevel(self.root)
         self.splash_win.overrideredirect(True)
-        self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-590//2}')
+        self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-510//2}')
         self.splash_image = tk.PhotoImage(file=splash_path)
         ttk.Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
         self.splash_win.attributes('-topmost',True)
@@ -354,7 +356,7 @@ class CrystalDex_main:
         self.clear_widgets()
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
-        self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
+        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
         startup.option_add('*tearOFF',tk.FALSE)
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
@@ -842,7 +844,6 @@ class CrystalDex_main:
                 cell_id = f'B{vial}'
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
-                #not sure how to do link, has something to do with the Box_save function...
                 condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{well_row}{well_column}']]
                 crystal_cell.offset(row=0,column=1).value = condition
                 crystal_cell.offset(row=0,column=2).value = f'{shape}'
