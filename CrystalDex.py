@@ -244,7 +244,7 @@ class CrystalDex_main:
                 with open(file_path,'rb') as image_stream:
                     uploading_file_return = self.client.uploads.upload_file(
                         UploadFileAttributes(
-                            name=image_filename,parent=UploadFileAttributesParentField(id='325857937585')#The id here is where the images will end up.
+                            name=image_filename,parent=UploadFileAttributesParentField(id='328850048557')#The id here is where the images will end up.
                         ),
                         image_stream
                     )
