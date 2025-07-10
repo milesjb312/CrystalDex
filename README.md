@@ -32,6 +32,6 @@ If you're wondering about the purposes behind the existence of certain folders/f
 - SeBaView_path_file.json: a file that says where SeBaView is stored on your computer. If it fails, the user is prompted to select the SeBaView application, and the file is overwritten.
 - CrystalDex.gitignore: this file instructs GitHub to ignore the Box user authentication files generated whenever you first use CrystalDex or whenever Box fails to connect.
 - CrystalDex.py: this is where all the code for CrystalDex is stored
-- main.py: this is an entry point for the CrystalDex application, used when PyInstaller is trying to create an executable.
+- main.py: this is an entry point for the CrystalDex application, used when PyInstaller is trying to create an executable. If you're running the app from a terminal, this is the script you want to run.
 - main.spec: this file contains specifications for PyInstaller, such as which libraries to download to make a CrystalDex executable operational.
 - requirements.txt: this file isn't used for anything as far as I'm aware, I just generated it using pip > freeze to show what libraries/versions I need to make CrystalDex work.
