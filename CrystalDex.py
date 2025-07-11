@@ -82,6 +82,7 @@ class CrystalDex_main:
         self.tray_names = {}
         self.crystal_size = [0,0]
         self.harvesting = False
+        self.editing = False
         self.pixel_to_size = 2000/867 #2 millimeter or 2000 microns per 867 pixels at 100% magnification (ie. a picture size of 1280x960pixels on the screen)
         self.picture_upload_filenames = {}
         self.button_location = None
@@ -227,7 +228,6 @@ class CrystalDex_main:
         if os.path.exists(crystal_screens_path):
             with open(crystal_screens_path, "r") as s:
                 self.crystal_screens = json.load(s)
-                #print(self.crystal_screens)
 
     def refocus(self):
         """Refocus the window if minimized"""
@@ -351,6 +351,7 @@ class CrystalDex_main:
 
     def startup(self):
         self.harvesting = False
+        self.editing = False
         if not self.opened_microscope_app:
             self.splash()
             threading.Thread(target=self.load_SeBaView,daemon=True).start()
@@ -488,16 +489,20 @@ class CrystalDex_main:
         st_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
-        st_name_label = ttk.Label(st_frame,text=(
-            'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
-            '\nPlease review the following to ensure no duplicate trays are indexed!'
-        ))
-        st_name_label.grid(column=0,row=0)
+        if not self.editing:
+            st_name_label = ttk.Label(st_frame,text=(
+                'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
+                '\nPlease review the following to ensure no duplicate trays are indexed!'
+            ))
+            st_name_label.grid(column=0,row=0)
+        else:
+            st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
+            st_name_label.grid(column=0,row=0)
         tray_name = tk.StringVar()
         st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()))
         st_name_combobox.grid(column=0,row=1)
 
-        if not self.harvesting:
+        if not self.harvesting and not self.editing:
             none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
             none_of_the_above_label.grid(column=0,row=2)
             tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2,sticky='W')
@@ -529,6 +534,8 @@ class CrystalDex_main:
         target_protein_top_right_stock_concentration = ws['H2'].value
         target_protein_bottom_left_stock_concentration = ws['H3'].value
         custom_tags_values = ws['D5'].value
+        self.SeBaView_wrapper.maximize()
+        self.SeBaView_wrapper.set_focus()
         self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.refocus()
 
@@ -866,12 +873,6 @@ class CrystalDex_main:
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
         """
-        #Putting in the following lines fixes the geometry problem, but then the computer doesn't let you click anywhere else. How to break out of the tkinter loop and then back in?
-        #self.SeBaView_wrapper.maximize()
-        #self.SeBaView_wrapper.set_focus()
-        #self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
-        #self.refocus()
-
         self.crystal_size = [0,0]
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
@@ -881,6 +882,7 @@ class CrystalDex_main:
         icon = tk.PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
+        self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
         self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(tk.FALSE,tk.FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
@@ -923,6 +925,7 @@ class CrystalDex_main:
 
     def Edit_Tray(self):
         """This is the root method that allows you to index a tray that has already been started."""
+        self.editing = True
         x = 0
         for ws in self.wb:
             x += 1
