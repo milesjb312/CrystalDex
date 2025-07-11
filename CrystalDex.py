@@ -816,7 +816,7 @@ class CrystalDex_main:
             picture_link_cell = ws[f'{column}{row}']
             if subwell=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
-                column = column+2
+                column = px.utils.get_column_letter(px.utils.column_index_from_string(column)+2)
             elif subwell=='bottom_left':
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
                 row = row+7
