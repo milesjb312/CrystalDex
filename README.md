@@ -35,3 +35,5 @@ If you're wondering about the purposes behind the existence of certain folders/f
 - main.py: this is an entry point for the CrystalDex application, used when PyInstaller is trying to create an executable. If you're running the app from a terminal, this is the script you want to run.
 - main.spec: this file contains specifications for PyInstaller, such as which libraries to download to make a CrystalDex executable operational.
 - requirements.txt: this file isn't used for anything as far as I'm aware, I just generated it using pip > freeze to show what libraries/versions I need to make CrystalDex work.
+
+Future updates will include a queue so that you can still attempt to update Box files even when someone else is currently editing them (currently, the upload fails and raises an error).
