@@ -238,31 +238,37 @@ class CrystalDex_main:
     def Box_Save(self):
         """This method allows users to upload both pictures and workbooks into Box. I'm not sure if it will work for uploading to Box folders that are not within the user's 
         personal directory, but I will be testing that soon."""
+        box_pics = self.client.folders.get_folder_items('328850048557', fields='name').entries
+        box_pic_names = {box_pic.name for box_pic in box_pics}
         for image_filename in os.listdir(crystal_pictures):
-            if image_filename in self.picture_upload_filenames.keys():
+            if image_filename in self.picture_upload_filenames.keys() and image_filename not in box_pic_names:
                 file_path = os.path.join(crystal_pictures, image_filename)
-                with open(file_path,'rb') as image_stream:
-                    uploading_file_return = self.client.uploads.upload_file(
-                        UploadFileAttributes(
-                            name=image_filename,parent=UploadFileAttributesParentField(id='328850048557')#The id here is where the images will end up.
-                        ),
-                        image_stream
-                    )
-                    uploading_file = uploading_file_return.entries[0]
-                    self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                    shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
-                    shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
-                    ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
-                    ws = self.wb[ws_title]
-                    cell_id = self.picture_upload_filenames.get(image_filename)[1]
-                    ws[cell_id].hyperlink = shared_link_url
-                    self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                    if 'harvested' in image_filename:
-                        for x in range(2,300):
-                            cell_id = f'B{x}'
-                            if self.sendoff_sheet[cell_id] == image_filename:
-                                self.sendoff_sheet[cell_id].hyperlink = shared_link_url
-                    self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                try:
+                    with open(file_path,'rb') as image_stream:
+                        uploading_file_return = self.client.uploads.upload_file(
+                            UploadFileAttributes(
+                                name=image_filename,parent=UploadFileAttributesParentField(id='328850048557')#The id here is where the images will end up.
+                            ),
+                            image_stream
+                        )
+                        uploading_file = uploading_file_return.entries[0]
+                        self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                        shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
+                        shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
+                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        ws = self.wb[ws_title]
+                        cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                        ws[cell_id].hyperlink = shared_link_url
+                        self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                        if 'harvested' in image_filename:
+                            for x in range(2,300):
+                                cell_id = f'B{x}'
+                                if self.sendoff_sheet[cell_id] == image_filename:
+                                    self.sendoff_sheet[cell_id].hyperlink = shared_link_url
+                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f'Error uploading {image_filename}: {e}')
 
         #The following command uploads the Crystal Trays Library
         self.client.uploads.upload_file_version(
@@ -294,8 +300,8 @@ class CrystalDex_main:
                 file=open(os.path.abspath(Crystal_Sendoff),"rb"
                 )
             )
-        #Not sure why, but these few lines aren't working:
-        if self.splash_win.winfo_exists:
+
+        if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
             self.root.after(0,self.splash_win.destroy)
         else:
             self.startup()
@@ -763,8 +769,7 @@ class CrystalDex_main:
         
         for child in subwell_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
-        self.refocus()
-
+        
     def monitor_mouse(self):
         print(f'monitor_mouse is running...')
         if mouse_is_down:
@@ -853,6 +858,7 @@ class CrystalDex_main:
         elif self.harvesting:
             if self.crystal_size[1] != 0:
                 take_take_picture()
+                #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to Box until the Box_Save function is run when you're done with the whole tray.
                 cell_id = f'B{vial}'
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
