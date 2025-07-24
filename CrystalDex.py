@@ -247,7 +247,7 @@ class CrystalDex_main:
                     with open(file_path,'rb') as image_stream:
                         uploading_file_return = self.client.uploads.upload_file(
                             UploadFileAttributes(
-                                name=image_filename,parent=UploadFileAttributesParentField(id='328850048557')#The id here is where the images will end up.
+                                name=image_filename,parent=UploadFileAttributesParentField(id='328850048557') #The id here is where the images will end up. It references a folder in Box.
                             ),
                             image_stream
                         )
@@ -261,12 +261,13 @@ class CrystalDex_main:
                         ws[cell_id].hyperlink = shared_link_url
                         self.wb.save(filename=os.path.abspath(CrystalDex_library))
                         if 'harvested' in image_filename:
-                            for x in range(2,300):
+                            for x in range(2,301):
                                 cell_id = f'B{x}'
                                 if self.sendoff_sheet[cell_id] == image_filename:
                                     self.sendoff_sheet[cell_id].hyperlink = shared_link_url
                         self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
                     os.remove(file_path)
+                    #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
                 except Exception as e:
                     print(f'Error uploading {image_filename}: {e}')
 
@@ -695,14 +696,11 @@ class CrystalDex_main:
             harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester_var)
             harvester_entry.grid(column=2,row=13)
 
-            suggested_vial = '0'
-            vials_available = []
+            vials_available = [range(2,301)]
             for y in range(2,301):
                 cell_id = f'B{y}'
-                if suggested_vial == '0' and self.sendoff_sheet[cell_id].value == None:
-                    suggested_vial = str(y)
-                elif suggested_vial != '0' and self.sendoff_sheet[f'A{y}'].value == None:
-                    vials_available.append(str(y))
+                if self.sendoff_sheet[cell_id].value != None:
+                    vials_available.remove(y)
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
             vial_var = tk.StringVar()

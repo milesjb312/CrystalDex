@@ -1,4 +1,4 @@
-#Ifnore virtual environment
+#Ignore virtual environment
 .venv/
 
 #Ignore PyInstaller build artifacts
