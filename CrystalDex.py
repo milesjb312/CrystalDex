@@ -263,7 +263,8 @@ class CrystalDex_main:
                         if 'harvested' in image_filename:
                             for x in range(2,301):
                                 cell_id = f'B{x}'
-                                if self.sendoff_sheet[cell_id] == image_filename:
+                                print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
+                                if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
                                     self.sendoff_sheet[cell_id].hyperlink = shared_link_url
                         self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
                     os.remove(file_path)
@@ -696,7 +697,7 @@ class CrystalDex_main:
             harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester_var)
             harvester_entry.grid(column=2,row=13)
 
-            vials_available = [range(2,301)]
+            vials_available = list(range(2,301))
             for y in range(2,301):
                 cell_id = f'B{y}'
                 if self.sendoff_sheet[cell_id].value != None:
