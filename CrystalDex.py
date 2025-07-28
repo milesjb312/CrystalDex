@@ -76,6 +76,16 @@ def on_click(x,y,button,pressed):
 listener = mouse.Listener(on_click=on_click)
 listener.start()
 
+
+def lock_mouse(duration=0.5):
+    """Ensures that the mouse is far away from any important buttons when mouse clicks are simulated."""
+    def lock():
+        end_time = time.time() + duration
+        while time.time() < end_time:
+            pywinauto.mouse.move(coords=(10000, 10000))
+            time.sleep(0.0001)  # super tight loop
+    threading.Thread(target=lock, daemon=True).start()
+
 class CrystalDex_main:
     def __init__(self):
         self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
@@ -233,7 +243,6 @@ class CrystalDex_main:
         """Refocus the window if minimized"""
         self.root.deiconify()
         self.root.lift()
-        self.root.focus_force()
 
     def Box_Save(self):
         """This method allows users to upload both pictures and workbooks into Box. I'm not sure if it will work for uploading to Box folders that are not within the user's 
@@ -342,6 +351,8 @@ class CrystalDex_main:
                 self.SeBaView_wrapper.set_focus()
                 time.sleep(0.1)
                 for i in range(2):
+                    lock_mouse(duration=0.5)
+                    time.sleep(0.1)
                     self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting tk.Button.
                 self.SeBaView_wrapper.minimize()
                 self.opened_microscope_app = True
@@ -349,6 +360,7 @@ class CrystalDex_main:
                 print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
                 print(f"Error: {e}")
         self.root.after(0,self.splash_win.destroy)
+        self.root.after_idle(self.refocus)
 
     def close_SeBaView_and_root(self):
         try:
@@ -377,8 +389,7 @@ class CrystalDex_main:
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
 
-        for i in range(2):
-            self.refocus()
+        self.root.after_idle(self.refocus)
         self.root.mainloop() #This has to be the last line of code in the startup function (it can't be placed anywhere before SeBaView is loaded)
 
     def add_menu(self):
@@ -402,7 +413,7 @@ class CrystalDex_main:
         ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
         helptext = "This program functions by accessing Box and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
         ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky='N,E,W')
-        self.refocus()
+        self.root.after_idle(self.refocus)
 
     def New_Tray(self):
         self.clear_widgets()
@@ -488,7 +499,7 @@ class CrystalDex_main:
 
         for child in new_tray_frame.winfo_children():
             child.grid_configure(padx=5,pady=5)
-        self.refocus()
+        self.root.after_idle(self.refocus)
 
     def Select_Tray(self,short_title=None):
         self.clear_widgets()
@@ -531,7 +542,7 @@ class CrystalDex_main:
 
         tk.Button(st_frame,text="Save selection and proceed",
         command=lambda: self.proceed(self.wb[self.tray_names.get(tray_name.get())])).grid(column=0,row=3)
-        self.refocus()
+        self.root.after_idle(self.refocus)
 
     def proceed(self,ws):
         date_set = ws['D1'].value
@@ -545,8 +556,8 @@ class CrystalDex_main:
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
         self.identify_subwell(ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
-        self.refocus()
-
+        self.root.after_idle(self.refocus)
+    
     def Index_Tray(self,date_set,today,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values):
         indexable = False
         self.SeBaView_wrapper.maximize()
@@ -600,101 +611,152 @@ class CrystalDex_main:
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
                 self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
-        self.refocus()
+        self.root.after_idle(self.refocus)
+
+    def reset_subwell_vars(self):
+        now = datetime.now()        
+        if hasattr(self,'subwell_vars'):
+            if hasattr(self,'restore_subwell_vars_button'):
+                self.restore_subwell_vars_button.config(state='normal')
+            self.last_subwell_vars = {
+                'well_row':self.subwell_vars['well_row'].get(),
+                'well_column':self.subwell_vars['well_column'].get(),
+                'subwell':self.subwell_vars['subwell'].get(),
+                'crystal_width':self.subwell_vars['crystal_width'].get(),
+                'crystal_height':self.subwell_vars['crystal_height'].get(),
+                'number_of_crystals':self.subwell_vars['number_of_crystals'].get(),
+                'shape':self.subwell_vars['shape'].get(),
+                'possible_salt_crystals':self.subwell_vars['possible_salt_crystals'].get(),
+                'precipitation':self.subwell_vars['precipitation'].get(),
+                'microcrystals':self.subwell_vars['microcrystals'].get(),
+                'glassy_protein_or_artifacts':self.subwell_vars['glassy_protein_or_artifacts'].get(),
+                'harvester':self.subwell_vars['harvester'].get(),
+                'vial':self.subwell_vars['vial'].get()
+            }
+
+            self.subwell_vars['well_row'].set('')
+            self.subwell_vars['well_column'].set('')
+            self.subwell_vars['subwell'].set('')
+            self.subwell_vars['crystal_width'].set('')
+            self.subwell_vars['crystal_height'].set('')
+            self.subwell_vars['number_of_crystals'].set('')
+            self.subwell_vars['shape'].set('')
+            self.subwell_vars['possible_salt_crystals'].set(False)
+            self.subwell_vars['precipitation'].set(False)
+            self.subwell_vars['microcrystals'].set(False)
+            self.subwell_vars['glassy_protein_or_artifacts'].set(False)
+            self.subwell_vars['harvester'].set('')
+            self.subwell_vars['vial'].set('')
+
+        else:
+            self.subwell_vars = {'well_row':tk.StringVar(),'well_column':tk.StringVar(),'subwell':tk.StringVar(),'crystal_width':tk.StringVar(),
+                             'crystal_height':tk.StringVar(),'number_of_crystals':tk.StringVar(),'shape':tk.StringVar(),'possible_salt_crystals':tk.BooleanVar(),
+                             'precipitation':tk.BooleanVar(), 'microcrystals':tk.BooleanVar(),'glassy_protein_or_artifacts':tk.BooleanVar(),'now':now,
+                             'date_snapped':now.strftime('%m-%d-%Y-%H-%M-%S'),'harvester':tk.StringVar(),'vial':tk.StringVar()
+            }
+
+    def restore_subwell_vars(self):
+        self.subwell_vars['well_row'].set(self.last_subwell_vars['well_row'])
+        self.subwell_vars['well_column'].set(self.last_subwell_vars['well_column'])
+        self.subwell_vars['subwell'].set(self.last_subwell_vars['subwell'])
+        self.subwell_vars['crystal_width'].set(self.last_subwell_vars['crystal_width'])
+        self.subwell_vars['crystal_height'].set(self.last_subwell_vars['crystal_height'])
+        self.subwell_vars['number_of_crystals'].set(self.last_subwell_vars['number_of_crystals'])
+        self.subwell_vars['shape'].set(self.last_subwell_vars['shape'])
+        self.subwell_vars['possible_salt_crystals'].set(self.last_subwell_vars['possible_salt_crystals'])
+        self.subwell_vars['precipitation'].set(self.last_subwell_vars['precipitation'])
+        self.subwell_vars['microcrystals'].set(self.last_subwell_vars['microcrystals'])
+        self.subwell_vars['glassy_protein_or_artifacts'].set(self.last_subwell_vars['glassy_protein_or_artifacts'])
+        self.subwell_vars['harvester'].set(self.last_subwell_vars['harvester'])
+        self.subwell_vars['vial'].set(self.last_subwell_vars['vial'])
 
     def identify_subwell(self,ws,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values):
         self.clear_widgets()
         self.add_menu()
+
         self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
         subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
         subwell_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
-        self.refocus()
+        self.root.after_idle(self.refocus)
 
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
 
+        self.restore_subwell_vars_button = tk.Button(subwell_frame,text='Restore last subwell variables',
+                    command=self.restore_subwell_vars,state='disabled')
+        self.restore_subwell_vars_button.grid(column=2,row=1)
+
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
         well_row_label.grid(column=1,row=2)
         well_row_values = ['A','B','C','D','E','F','G','H']
-        well_row_var = tk.StringVar()
-        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row_var,values=well_row_values)
+        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_row'],values=well_row_values)
         well_row_drop_down.grid(column=2,row=2)
 
         well_column_label = ttk.Label(subwell_frame,text="Well column:")
         well_column_label.grid(column=1,row=3)
         well_column_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
-        well_column_var = tk.StringVar()
-        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column_var,values=well_column_values)
+        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_column'],values=well_column_values)
         well_column_drop_down.grid(column=2,row=3)
 
         subwell_values = ['top_left','top_right','bottom_left']
         subwell_label = ttk.Label(subwell_frame,text="subwell:")
         subwell_label.grid(column=1,row=4)
-        subwell_var = tk.StringVar()
-        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell_var,values=subwell_values)
+        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['subwell'],values=subwell_values)
         subwell_drop_down.grid(column=2,row=4)
 
-        crystal_width_var = tk.StringVar()
         crystal_width_label = ttk.Label(subwell_frame,text='crystal width:')
         crystal_width_label.grid(column=1,row=5)
-        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width_var,state=tk.DISABLED)
+        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=self.subwell_vars['crystal_width'],state=tk.DISABLED)
         crystal_width_entry.grid(column=2,row=5)
         um_width_label = ttk.Label(subwell_frame,text='um')
         um_width_label.grid(column=3,row=5)
 
-        crystal_height_var = tk.StringVar()
         crystal_height_label = ttk.Label(subwell_frame,text='crystal height:')
         crystal_height_label.grid(column=1,row=6)
-        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height_var,state=tk.DISABLED)
+        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=self.subwell_vars['crystal_height'],state=tk.DISABLED)
         crystal_height_entry.grid(column=2,row=6)
         um_row_label = ttk.Label(subwell_frame,text='um')
         um_row_label.grid(column=3,row=6)
 
         number_of_crystals_label = ttk.Label(subwell_frame,text='# of harvestable crystals (optional):')
         number_of_crystals_label.grid(column=1,row=7)
-        number_of_crystals_var = tk.StringVar()
-        number_of_crystals_entry = ttk.Spinbox(subwell_frame,from_=0,to=100,textvariable=number_of_crystals_var)
+        number_of_crystals_entry = ttk.Spinbox(subwell_frame,from_=0,to=100,textvariable=self.subwell_vars['number_of_crystals'])
         number_of_crystals_entry.grid(column=2,row=7)
 
         shape_label = ttk.Label(subwell_frame,text='Shape of crystals:')
         shape_label.grid(column=1,row=8)
-        shape_var = tk.StringVar()
-        shape_entry = ttk.Entry(subwell_frame,textvariable=shape_var)
+        shape_entry = ttk.Entry(subwell_frame,textvariable=self.subwell_vars['shape'])
         shape_entry.grid(column=2,row=8)
 
         possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
         possible_salt_crystals_label.grid(column=1,row=9)
-        possible_salt_crystals_var = tk.BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals_var,onvalue=True,offvalue=False).grid(column=2,row=9)
+        ttk.Checkbutton(subwell_frame,variable=self.subwell_vars['possible_salt_crystals'],onvalue=True,offvalue=False).grid(column=2,row=9)
 
         precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
         precipitation_label.grid(column=1,row=10)
-        precipitation_var = tk.BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=precipitation_var,onvalue=True,offvalue=False).grid(column=2,row=10)
+        ttk.Checkbutton(subwell_frame,variable=self.subwell_vars['precipitation'],onvalue=True,offvalue=False).grid(column=2,row=10)
 
         microcrystals_label = ttk.Label(subwell_frame,text="Microcrystals present")
         microcrystals_label.grid(column=1,row=11)
-        microcrystals_var = tk.BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=microcrystals_var,onvalue=True,offvalue=False).grid(column=2,row=11)
+        ttk.Checkbutton(subwell_frame,variable=self.subwell_vars['microcrystals'],onvalue=True,offvalue=False).grid(column=2,row=11)
 
         glassy_protein_or_artifacts_label = ttk.Label(subwell_frame,text="Glassy protein or artifacts present")
         glassy_protein_or_artifacts_label.grid(column=1,row=12)
-        glassy_protein_or_artifacts_var = tk.BooleanVar()
-        ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts_var,onvalue=True,offvalue=False).grid(column=2,row=12)
+        ttk.Checkbutton(subwell_frame,variable=self.subwell_vars['glassy_protein_or_artifacts'],onvalue=True,offvalue=False).grid(column=2,row=12)
 
-        now = datetime.now()
-        date_snapped = now.strftime('%m-%d-%Y-%H-%M-%S')
+        self.subwell_vars['now'] = datetime.now()
+        self.subwell_vars['date_snapped'] = self.subwell_vars['now'].strftime('%m-%d-%Y-%H-%M-%S')
 
         x = 0
         if self.harvesting:
             x = 2
             harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
             harvester_label.grid(column=1,row=13)
-            harvester_var = tk.StringVar()
-            harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester_var)
+            harvester_entry = ttk.Entry(subwell_frame,textvariable=self.subwell_vars['harvester'])
             harvester_entry.grid(column=2,row=13)
 
             vials_available = list(range(2,301))
@@ -704,8 +766,7 @@ class CrystalDex_main:
                     vials_available.remove(y)
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
-            vial_var = tk.StringVar()
-            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial_var,values=vials_available)
+            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['vial'],values=vials_available)
             vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
@@ -714,8 +775,8 @@ class CrystalDex_main:
         notes.grid(column=1,row=14+x,columnspan=2)
 
         def update_crystal_size_vars():
-            crystal_width_var.set(f'{self.crystal_size[0]}')
-            crystal_height_var.set(f'{self.crystal_size [1]}')
+            self.subwell_vars['crystal_width'].set(f'{self.crystal_size[0]}')
+            self.subwell_vars['crystal_height'].set(f'{self.crystal_size [1]}')
 
         tk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
@@ -727,20 +788,20 @@ class CrystalDex_main:
                         chaperone,
                         target_protein,
                         crystal_screen,
-                        str(well_row_var.get()),
-                        str(well_column_var.get()),
-                        str(subwell_var.get()),
-                        str(number_of_crystals_var.get()),
-                        str(shape_var.get()),
-                        bool(possible_salt_crystals_var.get()),
-                        bool(precipitation_var.get()),
-                        bool(microcrystals_var.get()),
-                        bool(glassy_protein_or_artifacts_var.get()),
+                        #str(well_row_var.get()),
+                        #str(well_column_var.get()),
+                        #str(subwell_var.get()),
+                        #str(number_of_crystals_var.get()),
+                        #str(shape_var.get()),
+                        #bool(possible_salt_crystals_var.get()),
+                        #bool(precipitation_var.get()),
+                        #bool(microcrystals_var.get()),
+                        #bool(glassy_protein_or_artifacts_var.get()),
                         date_set,
-                        date_snapped,
+                        #date_snapped,
                         notes.get(1.0,tk.END),
-                        vial=str(vial_var.get()),
-                        harvester = str(harvester_var.get())
+                        #vial=str(vial_var.get()),
+                        #harvester = str(harvester_var.get())
                     )).grid(column=1,row=16+x)
         else:
             tk.Button(subwell_frame,text='Take and save picture',
@@ -749,17 +810,17 @@ class CrystalDex_main:
                         chaperone,
                         target_protein,
                         crystal_screen,
-                        str(well_row_var.get()),
-                        str(well_column_var.get()),
-                        str(subwell_var.get()),
-                        str(number_of_crystals_var.get()),
-                        str(shape_var.get()),
-                        bool(possible_salt_crystals_var.get()),
-                        bool(precipitation_var.get()),
-                        bool(microcrystals_var.get()),
-                        bool(glassy_protein_or_artifacts_var.get()),
+                        #str(well_row_var.get()),
+                        #str(well_column_var.get()),
+                        #str(subwell_var.get()),
+                        #str(number_of_crystals_var.get()),
+                        #str(shape_var.get()),
+                        #bool(possible_salt_crystals_var.get()),
+                        #bool(precipitation_var.get()),
+                        #bool(microcrystals_var.get()),
+                        #bool(glassy_protein_or_artifacts_var.get()),
                         date_set,
-                        date_snapped,
+                        #date_snapped,
                         notes.get(1.0,tk.END)
                     )).grid(column=1,row=16+x)
 
@@ -770,6 +831,7 @@ class CrystalDex_main:
             child.grid_configure(padx=5,pady=10)
         
     def monitor_mouse(self):
+        """This is just used if you're trying to figure out where you need to simulate a new button click. It is not used in the current program."""
         print(f'monitor_mouse is running...')
         if mouse_is_down:
             x, y = pyautogui.position()
@@ -786,50 +848,54 @@ class CrystalDex_main:
             chaperone,
             target_protein,
             crystal_screen,
-            well_row,
-            well_column,
-            subwell,
-            number_of_crystals,
-            shape,
-            possible_salt_crystals,
-            precipitation,
-            microcrystals,
-            glassy_protein_or_artifacts,
+            #well_row,
+            #well_column,
+            #subwell,
+            #number_of_crystals,
+            #shape,
+            #possible_salt_crystals,
+            #precipitation,
+            #microcrystals,
+            #glassy_protein_or_artifacts,
             date_set,
-            date_snapped,
+            #date_snapped,
             notes,
             vial=None,
             harvester=None):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         
-        image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{well_row}{well_column}_{subwell}_{date_set}_{date_snapped}'
+        image_title = f'{chaperone}_{target_protein}_{crystal_screen}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{date_set}_{self.subwell_vars['date_snapped']}'
         if self.harvesting:
             image_title = image_title+'_harvested'
 
         def take_take_picture():
             self.SeBaView_wrapper.maximize()
             self.SeBaView_wrapper.set_focus()
+            lock_mouse(duration=0.5)
+            time.sleep(0.1)
             self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
             time.sleep(1)
             for i in range(2):
+                lock_mouse(duration=0.5)
+                time.sleep(0.1)
                 self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-            row = well_to_excel_dict.get(well_row)
-            column = well_to_excel_dict.get(well_column)
+            row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
+            column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
             
             picture_link_cell = ws[f'{column}{row}']
-            if subwell=='top_right':
+            if self.subwell_vars['subwell'].get()=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
                 column = px.utils.get_column_letter(px.utils.column_index_from_string(column)+2)
-            elif subwell=='bottom_left':
+            elif self.subwell_vars['subwell'].get()=='bottom_left':
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
                 row = row+7
             picture_link_cell.value = image_title
-            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(date_snapped,'%m-%d-%Y-%H-%M-%S')-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
+            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
             picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
-            picture_link_cell.offset(row=3,column=0).value = f'{number_of_crystals}'
-            picture_link_cell.offset(row=4,column=0).value = f'{shape}'
-            picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {possible_salt_crystals}, precipitation: {precipitation}, microcrystals: {microcrystals}, glassy protein or artifacts: {glassy_protein_or_artifacts}'
+            picture_link_cell.offset(row=3,column=0).value = f'{self.subwell_vars['number_of_crystals'].get()}'
+            picture_link_cell.offset(row=4,column=0).value = f'{self.subwell_vars['shape'].get()}'
+            picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {self.subwell_vars['possible_salt_crystals'].get()}, precipitation: {self.subwell_vars['precipitation'].get()}, microcrystals: {self.subwell_vars['microcrystals'].get()}, glassy protein or artifacts: {self.subwell_vars['glassy_protein_or_artifacts'].get()}'
             picture_link_cell.offset(row=6,column=0).value = notes
 
             for x in range(7):
@@ -851,6 +917,8 @@ class CrystalDex_main:
 
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
+            self.reset_subwell_vars()
+            self.root.after_idle(self.refocus)
             
         if self.harvesting == False:
             take_take_picture()
@@ -861,19 +929,17 @@ class CrystalDex_main:
                 cell_id = f'B{vial}'
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
-                condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{well_row}{well_column}']]
+                condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
                 crystal_cell.offset(row=0,column=1).value = condition
-                crystal_cell.offset(row=0,column=2).value = f'{shape}'
+                crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
                 crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
                 crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
                 crystal_cell.offset(row=0,column=5).value = harvester
-                crystal_cell.offset(row=0,column=6).value = f'{date_set}, {date_snapped}' #date_set and date_harvested are passed from identify_subwell 
+                crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
                 crystal_cell.offset(row=0,column=7).value = notes
                 self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
-
-        self.refocus()
 
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
@@ -898,7 +964,7 @@ class CrystalDex_main:
         self.line_end = None
         self.measure_tool_window.deiconify()
         self.measure_tool_window.lift()
-        self.measure_tool_window.focus_force()
+        self.measure_tool_window.focus_force() #so that when users click and drag, they don't have to click twice on the screen first.
 
         def poll_mouse():
             nonlocal measure_tool
@@ -1068,8 +1134,8 @@ class CrystalDex_main:
                 self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
                 with open(crystal_screens_path, "w") as c:
                     json.dump(self.crystal_screens, c)
-                self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
                 self.Box_Save()
+                self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
             
             tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
 
@@ -1297,7 +1363,7 @@ class CrystalDex_main:
                 link = 'https://hamptonresearch.com/make-tray.php'
                 webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(link)
                 time.sleep(1)
-                self.refocus()
+                self.root.after_idle(self.refocus)
                 self.root.geometry(f'{self.screen_width//2}x{self.screen_height}+0+0')#Not sure why this line doesn't work
                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
                 optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')#the full sticky means this fills the master frame.
