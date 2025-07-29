@@ -429,12 +429,16 @@ class CrystalDex_main:
         today_label = ttk.Label(new_tray_frame,text="Today?")
         today_label.grid(column=3,row=5,sticky='N,W')
         today_var = tk.BooleanVar()
-        ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False).grid(column=4,row=5,sticky='N,W')
+        today_checkbutton = ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False)
+        today_checkbutton.grid(column=4,row=5,sticky='N,W')
         date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
         date_set_label.grid(column=1,row=5,sticky='N,W')
         date_set_var = tk.StringVar()
         date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
         date_set_drop_down.grid(column=2,row=5)
+        def set_today(*event):
+            date_set_var.set(str(datetime.now().strftime('%m-%d-%Y')))
+        today_checkbutton.bind('<ButtonPress>',set_today)
 
         chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
         chaperone_label.grid(column=1,row=6,sticky='N,W')
@@ -449,7 +453,7 @@ class CrystalDex_main:
         crystal_screen_drop_down.grid(column=2,row=7)
 
         target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
-        target_protein_label = ttk.Label(new_tray_frame,text="Target Protein (For large constructs, include the full name with linkers):")
+        target_protein_label = ttk.Label(new_tray_frame,text="Target protein: For Moody Lab users, put FULL construct name!!! (do not use special characters /.:;'*?\")")
         target_protein_label.grid(column=1,row=8,sticky='N,W')
         target_protein_var = tk.StringVar()
         target_protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_var,values=target_protein_values)
@@ -598,7 +602,12 @@ class CrystalDex_main:
                 new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
                 full_title = f'{date_set}_{self.crystal_screen_symbols.get(crystal_screen)}_{target_protein}_1'
                 short_title = full_title[:26]
-                new_worksheet.title = short_title
+                try:
+                    new_worksheet.title = short_title
+                except ValueError:
+                    messagebox.showerror(title='Bad Title',message="You tried to use a special character in one of your tray descriptors. Try again with none of the following: ()/.:;'*?\"")
+                    self.startup()
+                all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values]
                 all_tags = [date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values]
                 new_worksheet['A1'] = full_title
                 new_worksheet['K1'] = ', '.join(map(str,all_tags))
