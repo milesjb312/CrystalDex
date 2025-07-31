@@ -280,6 +280,22 @@ class CrystalDex_main:
                     #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
                 except Exception as e:
                     print(f'Error uploading {image_filename}: {e}')
+            """
+            elif image_filename not in self.picture_upload_filenames.keys():
+                self.image_rescue = tk.Toplevel(self.root)
+                icon = tk.PhotoImage(file=icon_path)
+                self.image_rescue.iconphoto(True,icon)
+                self.image_rescure.title("Image Rescue")
+                self.image_rescue.geometry(f'{200}x{200}+{self.screen_width/2-100}+{self.screen_height/2-100}')
+                image_rescue_label = ttk.Label(self.image_rescue,text=f"An image from a previous CrystalDex session is stuck in image prison. It is sitting in the folder that uploads to Box, but CrystalDex is unsure which virtual tray it belongs to. It appears to belong to the {} tray. If so, click 'Confirm'. Otherwise, delete the picture by clicking 'Let it go'")
+                image_rescue_label.grid(column=0,row=0)
+                image_rescue_button = tk.Button(self.image_rescue,text="Confirm",command=rescue_image)#see function below
+                image_rescue_button.grid(column=1,row=0)
+                image_destroy_button = tk.Button(self.image_rescue,text="Let it go",command=destroy_image)#see function below
+                def rescue_image():
+            """
+
+
 
         #The following command uploads the Crystal Trays Library
         self.client.uploads.upload_file_version(
@@ -924,7 +940,7 @@ class CrystalDex_main:
                         print(f"Failed to move {filename}: {e}")
                         print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
                         self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
-                else:
+                elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
                     messaged = False
                     for indexed_tray in self.wb:
                         if indexed_tray.title.lower() in filename.lower():
