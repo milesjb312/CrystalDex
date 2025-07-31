@@ -900,7 +900,8 @@ class CrystalDex_main:
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
                 row = row+7
             picture_link_cell.value = image_title
-            picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
+            if picture_link_cell.offset(row=1,column=0).value == "":
+                picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(date_set,"%m-%d-%Y")).days}' #might have to change the type of these variables
             picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
             picture_link_cell.offset(row=3,column=0).value = f'{self.subwell_vars['number_of_crystals'].get()}'
             picture_link_cell.offset(row=4,column=0).value = f'{self.subwell_vars['shape'].get()}'
@@ -915,7 +916,7 @@ class CrystalDex_main:
 
             for filename in os.listdir(desktop):
                 file_path = os.path.join(desktop, filename)
-                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) :#and time.time() - os.path.getmtime(file_path)<10
+                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
                     try:
                         shutil.move(file_path, crystal_pictures)
                         self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
@@ -923,7 +924,15 @@ class CrystalDex_main:
                         print(f"Failed to move {filename}: {e}")
                         print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
                         self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
-
+                else:
+                    messaged = False
+                    for indexed_tray in self.wb:
+                        if indexed_tray.title.lower() in filename.lower():
+                            messaged = True
+                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+                    if not messaged:
+                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+                            
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
             self.reset_subwell_vars()
@@ -939,14 +948,37 @@ class CrystalDex_main:
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
                 condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
-                crystal_cell.offset(row=0,column=1).value = condition
-                crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                crystal_cell.offset(row=0,column=5).value = harvester
-                crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                crystal_cell.offset(row=0,column=7).value = notes
-                self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                if crystal_cell.offset(row=0,column=1).value == "":
+                    crystal_cell.offset(row=0,column=1).value = condition
+                    crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
+                    crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                    crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                    crystal_cell.offset(row=0,column=5).value = harvester
+                    crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
+                    crystal_cell.offset(row=0,column=7).value = notes
+                    self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                else:
+                    self.harvest_error = tk.Toplevel(self.root)
+                    icon = tk.PhotoImage(file=icon_path)
+                    self.harvest_error.iconphoto(True,icon)
+                    self.harvest_error.title("Harvesting Error")
+                    self.harvest_error.geometry(f'{200}x{200}+{self.screen_width/2-100}+{self.screen_height/2-100}')
+                    vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway?")
+                    vial_full_label.grid(column=0,row=0)
+                    vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=vial_clear)
+                    vial_clear_button.grid(column=1,row=0)
+                    
+                    def vial_clear():
+                        crystal_cell.offset(row=0,column=1).value = condition
+                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
+                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                        crystal_cell.offset(row=0,column=5).value = harvester
+                        crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
+                        crystal_cell.offset(row=0,column=7).value = notes
+                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                        self.harvest_error.destroy()
+                    
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
 
@@ -1006,6 +1038,7 @@ class CrystalDex_main:
     def Edit_Tray(self):
         """This is the root method that allows you to index a tray that has already been started."""
         self.editing = True
+        self.reset_subwell_vars()
         x = 0
         for ws in self.wb:
             x += 1
