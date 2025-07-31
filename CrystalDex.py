@@ -280,20 +280,50 @@ class CrystalDex_main:
                     #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
                 except Exception as e:
                     print(f'Error uploading {image_filename}: {e}')
-            """
+            
             elif image_filename not in self.picture_upload_filenames.keys():
-                self.image_rescue = tk.Toplevel(self.root)
-                icon = tk.PhotoImage(file=icon_path)
-                self.image_rescue.iconphoto(True,icon)
-                self.image_rescure.title("Image Rescue")
-                self.image_rescue.geometry(f'{200}x{200}+{self.screen_width/2-100}+{self.screen_height/2-100}')
-                image_rescue_label = ttk.Label(self.image_rescue,text=f"An image from a previous CrystalDex session is stuck in image prison. It is sitting in the folder that uploads to Box, but CrystalDex is unsure which virtual tray it belongs to. It appears to belong to the {} tray. If so, click 'Confirm'. Otherwise, delete the picture by clicking 'Let it go'")
-                image_rescue_label.grid(column=0,row=0)
-                image_rescue_button = tk.Button(self.image_rescue,text="Confirm",command=rescue_image)#see function below
-                image_rescue_button.grid(column=1,row=0)
-                image_destroy_button = tk.Button(self.image_rescue,text="Let it go",command=destroy_image)#see function below
-                def rescue_image():
-            """
+                if image_filename.lower().endswith(('.jpeg','.jpg','.bmp')):
+                    for ws in self.wb:
+                        if ws.title.lower() in image_filename.lower():
+                            likely_ws = ws
+                    self.image_rescue = tk.Toplevel(self.root)
+                    icon = tk.PhotoImage(file=icon_path)
+                    self.image_rescue.iconphoto(True,icon)
+                    self.image_rescue.title("Image Rescue")
+                    self.image_rescue.geometry(f'{200}x{200}+{self.screen_width//2-100}+{self.screen_height//2-100}')
+                    image_rescue_label = ttk.Label(self.image_rescue,text=f"An image from a previous CrystalDex session is stuck in image prison. It is sitting in the folder that uploads to Box, but CrystalDex is unsure which virtual tray it belongs to. It appears to belong to the {likely_ws.title} tray. If so, click 'Confirm'. Otherwise, delete the picture by clicking 'Let it go'")
+                    image_rescue_label.grid(column=0,row=0)
+                    image_rescue_button = tk.Button(self.image_rescue,text="Confirm",command=rescue_image)#see function below
+                    image_rescue_button.grid(column=1,row=0)
+                    image_destroy_button = tk.Button(self.image_rescue,text="Let it go",command=destroy_image)#see function below
+                    image_destroy_button.grid(column=2,row=0)
+                    def rescue_image():
+                        try:
+                            with open(file_path,'rb') as image_stream:
+                                uploading_file_return = self.client.uploads.upload_file(
+                                    UploadFileAttributes(
+                                        name=image_filename,parent=UploadFileAttributesParentField(id='328850048557') #The id here is where the images will end up. It references a folder in Box.
+                                    ),
+                                    image_stream
+                                )
+                                uploading_file = uploading_file_return.entries[0]
+                                self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                                shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
+                                shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
+                                cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                                likely_ws[cell_id].hyperlink = shared_link_url
+                                self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                                if 'harvested' in image_filename:
+                                    for x in range(2,301):
+                                        cell_id = f'B{x}'
+                                        if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
+                                            self.sendoff_sheet[cell_id].hyperlink = shared_link_url
+                                self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                            os.remove(file_path)
+                        except Exception as e:
+                            print(f'Error uploading {image_filename}: {e}')
+                    def destroy_image():
+                        os.remove(file_path)
 
 
 
@@ -636,7 +666,7 @@ class CrystalDex_main:
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
+                self.reset_subwell_vars()
                 self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.root.after_idle(self.refocus)
 
@@ -885,7 +915,7 @@ class CrystalDex_main:
             date_set,
             #date_snapped,
             notes,
-            vial=None,
+            #vial,
             harvester=None):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         
@@ -930,6 +960,47 @@ class CrystalDex_main:
                 
             self.wb.save(filename=os.path.abspath(CrystalDex_library))
 
+            if self.harvesting:
+                if self.crystal_size[1] != 0:
+                    #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to Box until the Box_Save function is run when you're done with the whole tray.
+                    cell_id = f'B{str(self.subwell_vars['vial'].get())}'
+                    crystal_cell = self.sendoff_sheet[cell_id]
+                    crystal_cell.value = image_title
+                    condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
+                    if crystal_cell.offset(row=0,column=1).value == "":
+                        crystal_cell.offset(row=0,column=1).value = condition
+                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
+                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                        crystal_cell.offset(row=0,column=5).value = harvester
+                        crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
+                        crystal_cell.offset(row=0,column=7).value = notes
+                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                    else:
+                        self.harvest_error = tk.Toplevel(self.root)
+                        icon = tk.PhotoImage(file=icon_path)
+                        self.harvest_error.iconphoto(True,icon)
+                        self.harvest_error.title("Harvesting Error")
+                        self.harvest_error.geometry(f'{200}x{200}+{self.screen_width//2-100}+{self.screen_height//2-100}')
+                        vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway?")
+                        vial_full_label.grid(column=0,row=0)
+                        vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=lambda: vial_clear())
+                        vial_clear_button.grid(column=1,row=0)
+                        
+                        def vial_clear():
+                            crystal_cell.offset(row=0,column=1).value = condition
+                            crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
+                            crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                            crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                            crystal_cell.offset(row=0,column=5).value = harvester
+                            crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
+                            crystal_cell.offset(row=0,column=7).value = notes
+                            self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                            self.harvest_error.destroy()
+                        
+                else:
+                    messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
+
             for filename in os.listdir(desktop):
                 file_path = os.path.join(desktop, filename)
                 if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
@@ -954,49 +1025,7 @@ class CrystalDex_main:
             self.reset_subwell_vars()
             self.root.after_idle(self.refocus)
             
-        if self.harvesting == False:
-            take_take_picture()
-        elif self.harvesting:
-            if self.crystal_size[1] != 0:
-                take_take_picture()
-                #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to Box until the Box_Save function is run when you're done with the whole tray.
-                cell_id = f'B{vial}'
-                crystal_cell = self.sendoff_sheet[cell_id]
-                crystal_cell.value = image_title
-                condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
-                if crystal_cell.offset(row=0,column=1).value == "":
-                    crystal_cell.offset(row=0,column=1).value = condition
-                    crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                    crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                    crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                    crystal_cell.offset(row=0,column=5).value = harvester
-                    crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                    crystal_cell.offset(row=0,column=7).value = notes
-                    self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                else:
-                    self.harvest_error = tk.Toplevel(self.root)
-                    icon = tk.PhotoImage(file=icon_path)
-                    self.harvest_error.iconphoto(True,icon)
-                    self.harvest_error.title("Harvesting Error")
-                    self.harvest_error.geometry(f'{200}x{200}+{self.screen_width/2-100}+{self.screen_height/2-100}')
-                    vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway?")
-                    vial_full_label.grid(column=0,row=0)
-                    vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=vial_clear)
-                    vial_clear_button.grid(column=1,row=0)
-                    
-                    def vial_clear():
-                        crystal_cell.offset(row=0,column=1).value = condition
-                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                        crystal_cell.offset(row=0,column=5).value = harvester
-                        crystal_cell.offset(row=0,column=6).value = f'{date_set}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                        crystal_cell.offset(row=0,column=7).value = notes
-                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                        self.harvest_error.destroy()
-                    
-            else:
-                messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
+        take_take_picture()
 
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
@@ -1070,6 +1099,7 @@ class CrystalDex_main:
         creates a crystal sendoff sheet that is useful for tracking what conditions and stats each crystal had.
         """
         self.harvesting = True
+        self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
         x = 0
         for ws in self.wb:
             x += 1
