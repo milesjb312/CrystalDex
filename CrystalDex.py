@@ -945,7 +945,6 @@ class CrystalDex_main:
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
             row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
             column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
-            
             picture_link_cell = ws[f'{column}{row}']
             if self.subwell_vars['subwell'].get()=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
