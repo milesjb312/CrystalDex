@@ -1011,11 +1011,11 @@ class CrystalDex_main:
                 if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
                     try:
                         shutil.move(file_path, crystal_pictures)
-                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                        self.picture_upload_filenames[filename] = [ws.title,f'{self.subwell_vars['well_column'].get()}{self.subwell_vars['well_row'].get()}']
                     except Exception as e:
                         print(f"Failed to move {filename}: {e}")
                         print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                        self.picture_upload_filenames[filename] = [ws.title,f'{self.subwell_vars['well_column'].get()}{self.subwell_vars['well_row'].get()}']
                 elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
                     messaged = False
                     for indexed_tray in self.wb:
