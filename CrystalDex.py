@@ -76,7 +76,6 @@ def on_click(x,y,button,pressed):
 listener = mouse.Listener(on_click=on_click)
 listener.start()
 
-
 def lock_mouse(duration=0.5):
     """Ensures that the mouse is far away from any important buttons when mouse clicks are simulated."""
     def lock():
@@ -88,6 +87,8 @@ def lock_mouse(duration=0.5):
 
 class CrystalDex_main:
     def __init__(self):
+        self.box_uploading = False
+        self.server_uploading = True
         self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.tray_names = {}
         self.crystal_size = [0,0]
@@ -118,121 +119,122 @@ class CrystalDex_main:
         self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
         self.selected_condition = tk.StringVar(value='')
 
-        #Box integrations:
-        CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
-        CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
+        if self.box_uploading:
+            #Box integrations:
+            CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
+            CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
 
-        def delete_token_files(base_name = 'box_token'):
-            for f in glob.glob(base_name+'*'):
-                try:
-                    os.remove(f)
-                except Exception as e:
-                    print(f'Failed to delete {f}: {e}')
-
-        def authorize():
-            token_storage = FileTokenStorage(filename='box_token')
-            config = OAuthConfig(
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET,
-                token_storage=token_storage
-            )
-            return BoxOAuth(config)
-
-        def get_code():
-            for proc in reversed(list(psutil.process_iter(['pid','name']))):
-                if proc.info['name'] and 'msedge.exe'.lower() in proc.info['name'].lower():
-                    print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')#For some reason, deleting this line or commenting it out messes things up.
+            def delete_token_files(base_name = 'box_token'):
+                for f in glob.glob(base_name+'*'):
                     try:
-                        browser = Application().connect(process=proc.info['pid'])
-                        browser.top_window().set_focus()
-                        start = time.time()
-                        while time.time() - start< 120:
-                            try:
-                                pyautogui.hotkey('ctrl','l')
-                                time.sleep(0.1)
-                                pyautogui.hotkey('ctrl','c')
-                                time.sleep(0.1)
-                                url = pyperclip.paste()
-                                if 'code=' in url and 'localhost' in url:
-                                    #print(f'url: {url}')
-                                    authorization_code = url.split('code=')[1]
-                                    return authorization_code
-                            except Exception as e:
-                                print('Error while reading clipboard:', e)
-                            time.sleep(10)
-                        return True
-                    except Exception:
-                        pass
-            return False
+                        os.remove(f)
+                    except Exception as e:
+                        print(f'Failed to delete {f}: {e}')
 
-        auth = authorize()
+            def authorize():
+                token_storage = FileTokenStorage(filename='box_token')
+                config = OAuthConfig(
+                    client_id=CLIENT_ID,
+                    client_secret=CLIENT_SECRET,
+                    token_storage=token_storage
+                )
+                return BoxOAuth(config)
 
-        def reset_box_auth():
-            print(f'Box token loading failed. Resetting token storage.')
-            delete_token_files()
+            def get_code():
+                for proc in reversed(list(psutil.process_iter(['pid','name']))):
+                    if proc.info['name'] and 'msedge.exe'.lower() in proc.info['name'].lower():
+                        print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')#For some reason, deleting this line or commenting it out messes things up.
+                        try:
+                            browser = Application().connect(process=proc.info['pid'])
+                            browser.top_window().set_focus()
+                            start = time.time()
+                            while time.time() - start< 120:
+                                try:
+                                    pyautogui.hotkey('ctrl','l')
+                                    time.sleep(0.1)
+                                    pyautogui.hotkey('ctrl','c')
+                                    time.sleep(0.1)
+                                    url = pyperclip.paste()
+                                    if 'code=' in url and 'localhost' in url:
+                                        #print(f'url: {url}')
+                                        authorization_code = url.split('code=')[1]
+                                        return authorization_code
+                                except Exception as e:
+                                    print('Error while reading clipboard:', e)
+                                time.sleep(10)
+                            return True
+                        except Exception:
+                            pass
+                return False
+
             auth = authorize()
-            auth_url = auth.get_authorize_url()
-            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
-            authorization_code = get_code()
-            auth.get_tokens_authorization_code_grant(authorization_code)
-            self.client = BoxClient(auth=auth)
 
-        try:
-            auth.retrieve_token()
-            self.client = BoxClient(auth=auth)
-            #print(f'User already approved app for Box.')
-        except Exception as e:
-            reset_box_auth()
+            def reset_box_auth():
+                print(f'Box token loading failed. Resetting token storage.')
+                delete_token_files()
+                auth = authorize()
+                auth_url = auth.get_authorize_url()
+                webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
+                authorization_code = get_code()
+                auth.get_tokens_authorization_code_grant(authorization_code)
+                self.client = BoxClient(auth=auth)
 
-        #Access CrystalDex_Library or the Mastercopy:
-        file_download = None
-        try:
-            file_id = '1911115179608'
             try:
-                file_download = self.client.downloads.download_file(file_id).read()
-            except Exception:
+                auth.retrieve_token()
+                self.client = BoxClient(auth=auth)
+                #print(f'User already approved app for Box.')
+            except Exception as e:
                 reset_box_auth()
-                file_download = self.client.downloads.download_file(file_id).read()
-        except FileNotFoundError:
-                file_id = '1911117908557'
-                file_download = self.client.downloads.download_file(file_id).read()
-            
-        #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
-        with open(CrystalDex_library,"wb") as c:
-            c.write(file_download)
-        self.wb = px.load_workbook(filename=os.path.abspath(CrystalDex_library))
-        
-        #Access Crystal_Sendoff_Sheet:
-        file_download = None
-        try:
-            file_id = '1911117898957'
-            file_download = self.client.downloads.download_file(file_id).read()
-        except FileNotFoundError:
-            file_id = '1911115194008'
-            file_download = self.client.downloads.download_file(file_id).read()
-        with open(Crystal_Sendoff,'wb') as s:
-            s.write(file_download)
-        self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(Crystal_Sendoff))
-        self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
-        #Access Crystal_Screens.json:
-        self.crystal_screens = {}
-        file_download = None
-        try:
-            file_id = 1911117169207
-            file_download = self.client.downloads.download_file(file_id).read()
-        except FileNotFoundError:
-            pass
-        self.crystal_screen_values = []
-        self.crystal_screen_symbols = {}
-        if os.path.exists(crystal_screens_path):
-            with open(crystal_screens_path, "r") as s:
-                self.crystal_screens = json.load(s)
-                for crystal_screen in self.crystal_screens.keys():
-                    self.crystal_screen_values.append(crystal_screen)
-                    self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-        else:
-            pass
+            #Access CrystalDex_Library or the Mastercopy:
+            file_download = None
+            try:
+                file_id = '1911115179608'
+                try:
+                    file_download = self.client.downloads.download_file(file_id).read()
+                except Exception:
+                    reset_box_auth()
+                    file_download = self.client.downloads.download_file(file_id).read()
+            except FileNotFoundError:
+                    file_id = '1911117908557'
+                    file_download = self.client.downloads.download_file(file_id).read()
+                
+            #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
+            with open(CrystalDex_library,"wb") as c:
+                c.write(file_download)
+            self.wb = px.load_workbook(filename=os.path.abspath(CrystalDex_library))
+            
+            #Access Crystal_Sendoff_Sheet:
+            file_download = None
+            try:
+                file_id = '1911117898957'
+                file_download = self.client.downloads.download_file(file_id).read()
+            except FileNotFoundError:
+                file_id = '1911115194008'
+                file_download = self.client.downloads.download_file(file_id).read()
+            with open(Crystal_Sendoff,'wb') as s:
+                s.write(file_download)
+            self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(Crystal_Sendoff))
+            self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
+
+            #Access Crystal_Screens.json:
+            self.crystal_screens = {}
+            file_download = None
+            try:
+                file_id = 1911117169207
+                file_download = self.client.downloads.download_file(file_id).read()
+            except FileNotFoundError:
+                pass
+            self.crystal_screen_values = []
+            self.crystal_screen_symbols = {}
+            if os.path.exists(crystal_screens_path):
+                with open(crystal_screens_path, "r") as s:
+                    self.crystal_screens = json.load(s)
+                    for crystal_screen in self.crystal_screens.keys():
+                        self.crystal_screen_values.append(crystal_screen)
+                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
+            else:
+                pass
 
     def reload_crystal_screens(self):
         if os.path.exists(crystal_screens_path):
@@ -244,73 +246,73 @@ class CrystalDex_main:
         self.root.deiconify()
         self.root.lift()
 
-    def Box_Save(self):
-        """This method allows users to upload both pictures and workbooks into Box. I'm not sure if it will work for uploading to Box folders that are not within the user's 
-        personal directory, but I will be testing that soon."""
-        box_pics = self.client.folders.get_folder_items('328850048557', fields='name').entries
-        box_pic_names = {box_pic.name for box_pic in box_pics}
-        for image_filename in os.listdir(crystal_pictures):
-            if image_filename in self.picture_upload_filenames.keys() and image_filename not in box_pic_names:
-                file_path = os.path.join(crystal_pictures, image_filename)
-                try:
-                    with open(file_path,'rb') as image_stream:
-                        uploading_file_return = self.client.uploads.upload_file(
-                            UploadFileAttributes(
-                                name=image_filename,parent=UploadFileAttributesParentField(id='328850048557') #The id here is where the images will end up. It references a folder in Box.
-                            ),
-                            image_stream
-                        )
-                        uploading_file = uploading_file_return.entries[0]
-                        self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                        shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
-                        shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
-                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
-                        ws = self.wb[ws_title]
-                        cell_id = self.picture_upload_filenames.get(image_filename)[1]
-                        ws[cell_id].hyperlink = shared_link_url
-                        self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                        if 'harvested' in image_filename:
-                            for x in range(2,301):
-                                cell_id = f'B{x}'
-                                print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
-                                if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
-                                    self.sendoff_sheet[cell_id].hyperlink = shared_link_url
-                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                    os.remove(file_path)
-                    #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
-                except Exception as e:
-                    print(f'Error uploading {image_filename}: {e}')
+    def Server_Save(self):
+        """This method allows users to upload both pictures and workbooks."""
+        if self.box_uploading:
+            box_pics = self.client.folders.get_folder_items('328850048557', fields='name').entries
+            box_pic_names = {box_pic.name for box_pic in box_pics}
+            for image_filename in os.listdir(crystal_pictures):
+                if image_filename in self.picture_upload_filenames.keys() and image_filename not in box_pic_names:
+                    file_path = os.path.join(crystal_pictures, image_filename)
+                    try:
+                        with open(file_path,'rb') as image_stream:
+                            uploading_file_return = self.client.uploads.upload_file(
+                                UploadFileAttributes(
+                                    name=image_filename,parent=UploadFileAttributesParentField(id='328850048557') #The id here is where the images will end up. It references a folder in Box.
+                                ),
+                                image_stream
+                            )
+                            uploading_file = uploading_file_return.entries[0]
+                            self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
+                            shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
+                            shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
+                            ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                            ws = self.wb[ws_title]
+                            cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                            ws[cell_id].hyperlink = shared_link_url
+                            self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                            if 'harvested' in image_filename:
+                                for x in range(2,301):
+                                    cell_id = f'B{x}'
+                                    print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
+                                    if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
+                                        self.sendoff_sheet[cell_id].hyperlink = shared_link_url
+                            self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                        os.remove(file_path)
+                        #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
+                    except Exception as e:
+                        print(f'Error uploading {image_filename}: {e}')
 
-        #The following command uploads the Crystal Trays Library
-        self.client.uploads.upload_file_version(
-            attributes=box_sdk_gen.UploadFileAttributesParentField(
-                name="CrystalDex_Library.xlsx",
-                id="328850485682"),
-                file_id="1911115179608",
-                file=open(os.path.abspath(CrystalDex_library),"rb"
-                )
-            )
-        
-        #The following command uploads the Crystal_Screens.json
-        self.client.uploads.upload_file_version(
-            attributes=box_sdk_gen.UploadFileAttributesParentField(
-                name="Crystal_Screens.json",
-                id="328850485682"),
-                file_id="1911117169207",
-                file=open(os.path.abspath(crystal_screens_path),"rb"
-                )
-            )
-        
-        #The following command uploads the Crystal_Sendoff_Sheet.xlsx
-        if self.harvesting:
+            #The following command uploads the Crystal Trays Library
             self.client.uploads.upload_file_version(
-            attributes=box_sdk_gen.UploadFileAttributesParentField(
-                name="Crystal_Sendoff_Sheet.xlsx",
-                id="328850485682"),
-                file_id="1911117898957",
-                file=open(os.path.abspath(Crystal_Sendoff),"rb"
+                attributes=box_sdk_gen.UploadFileAttributesParentField(
+                    name="CrystalDex_Library.xlsx",
+                    id="328850485682"),
+                    file_id="1911115179608",
+                    file=open(os.path.abspath(CrystalDex_library),"rb"
+                    )
                 )
-            )
+            
+            #The following command uploads the Crystal_Screens.json
+            self.client.uploads.upload_file_version(
+                attributes=box_sdk_gen.UploadFileAttributesParentField(
+                    name="Crystal_Screens.json",
+                    id="328850485682"),
+                    file_id="1911117169207",
+                    file=open(os.path.abspath(crystal_screens_path),"rb"
+                    )
+                )
+            
+            #The following command uploads the Crystal_Sendoff_Sheet.xlsx
+            if self.harvesting:
+                self.client.uploads.upload_file_version(
+                attributes=box_sdk_gen.UploadFileAttributesParentField(
+                    name="Crystal_Sendoff_Sheet.xlsx",
+                    id="328850485682"),
+                    file_id="1911117898957",
+                    file=open(os.path.abspath(Crystal_Sendoff),"rb"
+                    )
+                )
 
         if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
             self.root.after(0,self.splash_win.destroy)
@@ -411,7 +413,7 @@ class CrystalDex_main:
         helpframe = ttk.Frame(self.root,padding='3 3 12 12')
         helpframe.grid(column=0,row=0,sticky='N,W,E,S')
         ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
-        helptext = "This program functions by accessing Box and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
+        helptext = "This program functions by accessing a server or the cloud and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
         ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky='N,E,W')
         self.root.after_idle(self.refocus)
 
@@ -506,6 +508,7 @@ class CrystalDex_main:
         self.root.after_idle(self.refocus)
 
     def Select_Tray(self,short_title=None):
+        self.reset_subwell_vars()
         self.clear_widgets()
         self.add_menu()
         st_frame = ttk.Frame(self.root,padding="3 3 12 12")
@@ -834,7 +837,7 @@ class CrystalDex_main:
                     )).grid(column=1,row=16+x)
 
         tk.Button(subwell_frame,text="Done with this tray",
-                   command=lambda: self.Box_Save()).grid(column=1,row=17+x)
+                   command=lambda: self.Server_Save()).grid(column=1,row=17+x)
         
         for child in subwell_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
@@ -924,15 +927,16 @@ class CrystalDex_main:
                         print(f"Failed to move {filename}: {e}")
                         print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
                         self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                """
                 else:
                     messaged = False
                     for indexed_tray in self.wb:
                         if indexed_tray.title.lower() in filename.lower():
                             messaged = True
-                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
                     if not messaged:
-                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
-                            
+                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
+                """
             if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
                 self.measure_tool_window.destroy()
             self.reset_subwell_vars()
@@ -943,7 +947,7 @@ class CrystalDex_main:
         elif self.harvesting:
             if self.crystal_size[1] != 0:
                 take_take_picture()
-                #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to Box until the Box_Save function is run when you're done with the whole tray.
+                #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
                 cell_id = f'B{vial}'
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
@@ -1172,14 +1176,14 @@ class CrystalDex_main:
                     
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
-            def save():
+            def save_screens():
                 self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
                 with open(crystal_screens_path, "w") as c:
                     json.dump(self.crystal_screens, c)
-                self.Box_Save()
+                self.Server_Save()
                 self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
             
-            tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save).grid(row=5,column=2)
+            tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save_screens).grid(row=5,column=2)
 
     def Optimization_Screen(self):
         """Allows users to either create a custom optimization screen (while optionally looking up a reference condition from any of the screens
