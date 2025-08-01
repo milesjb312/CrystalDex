@@ -623,7 +623,7 @@ class CrystalDex_main:
                 new_worksheet['H2'] = target_protein_top_right_stock_concentration
                 new_worksheet['H3'] = target_protein_bottom_left_stock_concentration
                 self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
+                self.reset_subwell_vars()
                 self.identify_subwell(new_worksheet,date_set,crystal_screen,target_protein,target_protein_top_left_stock_concentration,target_protein_top_right_stock_concentration,target_protein_bottom_left_stock_concentration,chaperone,custom_tags_values)
         self.root.after_idle(self.refocus)
 
@@ -872,7 +872,7 @@ class CrystalDex_main:
             date_set,
             #date_snapped,
             notes,
-            vial=None,
+            #vial,
             harvester=None):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         
@@ -948,7 +948,7 @@ class CrystalDex_main:
             if self.crystal_size[1] != 0:
                 take_take_picture()
                 #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
-                cell_id = f'B{vial}'
+                cell_id = f'B{str(self.subwell_vars['vial'].get())}'
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
                 condition = self.crystal_screens.get(crystal_screen)[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
@@ -985,6 +985,32 @@ class CrystalDex_main:
                     
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
+
+            for filename in os.listdir(desktop):
+                file_path = os.path.join(desktop, filename)
+                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
+                    try:
+                        shutil.move(file_path, crystal_pictures)
+                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                    except Exception as e:
+                        print(f"Failed to move {filename}: {e}")
+                        print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
+                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
+                    messaged = False
+                    for indexed_tray in self.wb:
+                        if indexed_tray.title.lower() in filename.lower():
+                            messaged = True
+                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+                    if not messaged:
+                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+                            
+            if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
+                self.measure_tool_window.destroy()
+            self.reset_subwell_vars()
+            self.root.after_idle(self.refocus)
+            
+        take_take_picture()
 
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
@@ -1058,6 +1084,7 @@ class CrystalDex_main:
         creates a crystal sendoff sheet that is useful for tracking what conditions and stats each crystal had.
         """
         self.harvesting = True
+        self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
         x = 0
         for ws in self.wb:
             x += 1
