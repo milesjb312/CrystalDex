@@ -746,6 +746,8 @@ class CrystalDex_main:
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
 
+        if hasattr(self,'restore_subwell_vars_button'):
+            self.restore_subwell_vars_button.destroy()
         self.restore_subwell_vars_button = tk.Button(subwell_frame,text='Restore last subwell variables',
                     command=self.restore_subwell_vars,state='disabled')
         self.restore_subwell_vars_button.grid(column=2,row=1)
