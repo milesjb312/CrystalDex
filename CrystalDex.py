@@ -46,16 +46,18 @@ import pdfplumber
 
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
+server_dir = os.path.dirname(os.path.abspath("Z:"))
+server_CrystalDex_dir = os.path.join(server_dir,"CrystalDex")
 icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
 splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
-server_crystal_pictures = os.path("Z:\CrystalDex\Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
+server_crystal_pictures = os.path.join(server_CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
 CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
-server_CrystalDex_library = os.path("Z:\CrystalDex\CrystalDex_Library.xlsx")
+server_CrystalDex_library = os.path.join(server_CrystalDex_dir,"CrystalDex_Library.xlsx")
 Crystal_Sendoff = os.path.join(script_dir,'Resources','Crystal_Sendoff_Sheet.xlsx')
-server_Crystal_Sendoff = os.path("Z:\CrystalDex\Crystal_Sendoff_Sheet.xlsx")
+server_Crystal_Sendoff = os.path.join(server_CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
 crystal_screens_path = os.path.join(script_dir,'Resources','Crystal_Screens.json')
-server_crystal_screens_path = os.path("Z:\CrystalDex\Crystal_Screens.json")
+server_crystal_screens_path = os.path.join(server_CrystalDex_dir,"Crystal_Screens.json")
 SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
 os.makedirs(crystal_pictures,exist_ok=True)
 home = os.path.expanduser("~")
