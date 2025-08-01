@@ -262,6 +262,8 @@ class CrystalDex_main:
         if os.path.exists(server_crystal_screens_path):
             with open(server_crystal_screens_path, "r") as s:
                 self.crystal_screens = json.load(s)
+                self.crystal_screen_values = []
+                self.crystal_screen_symbols = {}
                 for crystal_screen in self.crystal_screens.keys():
                     self.crystal_screen_values.append(crystal_screen)
                     self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
