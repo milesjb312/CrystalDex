@@ -993,11 +993,8 @@ class CrystalDex_main:
             self.reset_subwell_vars()
             self.root.after_idle(self.refocus)
             
-        if self.harvesting == False:
-            take_take_picture()
-        elif self.harvesting:
+        if self.harvesting:
             if self.crystal_size[1] != 0:
-                take_take_picture()
                 #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
                 cell_id = f'B{str(self.subwell_vars['vial'].get())}'
                 crystal_cell = self.sendoff_sheet[cell_id]
@@ -1135,7 +1132,7 @@ class CrystalDex_main:
         creates a crystal sendoff sheet that is useful for tracking what conditions and stats each crystal had.
         """
         self.harvesting = True
-        self.reset_subwell_vars() #This is where self.subwell_vars is initialized and/or reset.
+        self.reset_subwell_vars()
         x = 0
         for ws in self.wb:
             x += 1
