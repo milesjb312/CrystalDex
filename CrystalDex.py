@@ -939,10 +939,9 @@ class CrystalDex_main:
             time.sleep(0.1)
             self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
             time.sleep(1)
-            for i in range(2):
-                lock_mouse(duration=0.5)
-                time.sleep(0.1)
-                self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos there temporarily, although it might not work. I may need to get a wrapper for the save window that opens... 
+            lock_mouse(duration=0.5)
+            time.sleep(0.1)
+            self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
             row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
             column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
