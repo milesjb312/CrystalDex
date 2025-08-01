@@ -49,9 +49,13 @@ script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this sc
 icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
 splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
+server_crystal_pictures = os.path("Z:\CrystalDex\Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
 CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
+server_CrystalDex_library = os.path("Z:\CrystalDex\CrystalDex_Library.xlsx")
 Crystal_Sendoff = os.path.join(script_dir,'Resources','Crystal_Sendoff_Sheet.xlsx')
+server_Crystal_Sendoff = os.path("Z:\CrystalDex\Crystal_Sendoff_Sheet.xlsx")
 crystal_screens_path = os.path.join(script_dir,'Resources','Crystal_Screens.json')
+server_crystal_screens_path = os.path("Z:\CrystalDex\Crystal_Screens.json")
 SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
 os.makedirs(crystal_pictures,exist_ok=True)
 home = os.path.expanduser("~")
@@ -186,7 +190,7 @@ class CrystalDex_main:
             except Exception as e:
                 reset_box_auth()
 
-            #Access CrystalDex_Library or the Mastercopy:
+            #Access CrystalDex_Library or the Mastercopy from Box:
             file_download = None
             try:
                 file_id = '1911115179608'
@@ -204,7 +208,7 @@ class CrystalDex_main:
                 c.write(file_download)
             self.wb = px.load_workbook(filename=os.path.abspath(CrystalDex_library))
             
-            #Access Crystal_Sendoff_Sheet:
+            #Access Crystal_Sendoff_Sheet from Box:
             file_download = None
             try:
                 file_id = '1911117898957'
@@ -217,7 +221,7 @@ class CrystalDex_main:
             self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(Crystal_Sendoff))
             self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
 
-            #Access Crystal_Screens.json:
+            #Access Crystal_Screens.json from Box:
             self.crystal_screens = {}
             file_download = None
             try:
@@ -227,8 +231,8 @@ class CrystalDex_main:
                 pass
             self.crystal_screen_values = []
             self.crystal_screen_symbols = {}
-            if os.path.exists(crystal_screens_path):
-                with open(crystal_screens_path, "r") as s:
+            if os.path.exists(server_crystal_screens_path):
+                with open(server_crystal_screens_path, "r") as s:
                     self.crystal_screens = json.load(s)
                     for crystal_screen in self.crystal_screens.keys():
                         self.crystal_screen_values.append(crystal_screen)
@@ -236,10 +240,29 @@ class CrystalDex_main:
             else:
                 pass
 
+        elif self.server_uploading:
+            #Access CrystalDex_Library or the Mastercopy from the server:
+            self.wb = px.load_workbook(filename=os.path.abspath(server_CrystalDex_library))
+            #Access Crystal_Sendoff_Sheet from the server:
+            self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(server_Crystal_Sendoff))
+            self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
+            #Access Crystal_Screens.json from the server:
+            self.crystal_screen_values = []
+            self.crystal_screen_symbols = {}
+            if os.path.exists(server_crystal_screens_path):
+                with open(server_crystal_screens_path, "r") as s:
+                    self.crystal_screens = json.load(s)
+                    for crystal_screen in self.crystal_screens.keys():
+                        self.crystal_screen_values.append(crystal_screen)
+                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
+
     def reload_crystal_screens(self):
-        if os.path.exists(crystal_screens_path):
-            with open(crystal_screens_path, "r") as s:
+        if os.path.exists(server_crystal_screens_path):
+            with open(server_crystal_screens_path, "r") as s:
                 self.crystal_screens = json.load(s)
+                for crystal_screen in self.crystal_screens.keys():
+                    self.crystal_screen_values.append(crystal_screen)
+                    self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
 
     def refocus(self):
         """Refocus the window if minimized"""
@@ -299,7 +322,7 @@ class CrystalDex_main:
                     name="Crystal_Screens.json",
                     id="328850485682"),
                     file_id="1911117169207",
-                    file=open(os.path.abspath(crystal_screens_path),"rb"
+                    file=open(os.path.abspath(server_crystal_screens_path),"rb"
                     )
                 )
             
@@ -318,19 +341,22 @@ class CrystalDex_main:
                 if image_filename in self.picture_upload_filenames.keys():
                     try:
                         file_path = os.path.join(crystal_pictures, image_filename)
+                        server_file_path = shutil.move(file_path, server_crystal_pictures)
                         ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
                         ws = self.wb[ws_title]
                         cell_id = self.picture_upload_filenames.get(image_filename)[1]
                         if not self.box_uploading:#This is added because if the user is in fact uploading to box, the link that would be put in here would be useless to them.
-                            ws[cell_id].hyperlink = file_path
+                            ws[cell_id].hyperlink = server_file_path
                             self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                            self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
                             if 'harvested' in image_filename:
                                 for x in range(2,301):
                                     cell_id = f'B{x}'
                                     print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
                                     if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
-                                        self.sendoff_sheet[cell_id].hyperlink = file_path
+                                        self.sendoff_sheet[cell_id].hyperlink = server_file_path
                             self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                            self.sendoff_workbook.save(filename=os.path.abspath(server_Crystal_Sendoff))
                     except Exception as e:
                         print(f'Error uploading {image_filename}: {e}')
         
@@ -1225,7 +1251,7 @@ class CrystalDex_main:
             
             def save_screens():
                 self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
-                with open(crystal_screens_path, "w") as c:
+                with open(server_crystal_screens_path, "w") as c:
                     json.dump(self.crystal_screens, c)
                 self.Server_Save()
                 self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
@@ -1673,7 +1699,7 @@ class CrystalDex_main:
         def save():
             self.crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
             #print(f'crystal_screens: {self.crystal_screens}')
-            with open(crystal_screens_path, "w") as c:
+            with open(server_crystal_screens_path, "w") as c:
                 json.dump(self.crystal_screens, c)
             self.splash()
             threading.Thread(target=self.Box_Save,daemon=True).start()
