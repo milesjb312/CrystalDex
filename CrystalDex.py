@@ -313,7 +313,27 @@ class CrystalDex_main:
                     file=open(os.path.abspath(Crystal_Sendoff),"rb"
                     )
                 )
-
+        if self.server_uploading:
+            for image_filename in os.listdir(crystal_pictures):
+                if image_filename in self.picture_upload_filenames.keys():
+                    try:
+                        file_path = os.path.join(crystal_pictures, image_filename)
+                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        ws = self.wb[ws_title]
+                        cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                        if not self.box_uploading:#This is added because if the user is in fact uploading to box, the link that would be put in here would be useless to them.
+                            ws[cell_id].hyperlink = file_path
+                            self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                            if 'harvested' in image_filename:
+                                for x in range(2,301):
+                                    cell_id = f'B{x}'
+                                    print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
+                                    if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
+                                        self.sendoff_sheet[cell_id].hyperlink = file_path
+                            self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                    except Exception as e:
+                        print(f'Error uploading {image_filename}: {e}')
+        
         if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
             self.root.after(0,self.splash_win.destroy)
         else:
