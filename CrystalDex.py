@@ -51,6 +51,7 @@ server_CrystalDex_dir = os.path.join(server_dir,"CrystalDex")
 icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
 splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
+os.makedirs(crystal_pictures,exist_ok=True)
 server_crystal_pictures = os.path.join(server_CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
 CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
 server_CrystalDex_library = os.path.join(server_CrystalDex_dir,"CrystalDex_Library.xlsx")
@@ -59,7 +60,6 @@ server_Crystal_Sendoff = os.path.join(server_CrystalDex_dir,"Crystal_Sendoff_She
 crystal_screens_path = os.path.join(script_dir,'Resources','Crystal_Screens.json')
 server_crystal_screens_path = os.path.join(server_CrystalDex_dir,"Crystal_Screens.json")
 SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
-os.makedirs(crystal_pictures,exist_ok=True)
 home = os.path.expanduser("~")
 downloads = os.path.join(home, "Downloads")
 desktop = os.path.expanduser("~/Desktop")
@@ -344,8 +344,14 @@ class CrystalDex_main:
             for image_filename in os.listdir(crystal_pictures):
                 if image_filename in self.picture_upload_filenames.keys():
                     try:
+                        #Locate the file in the working directory
                         file_path = os.path.join(crystal_pictures, image_filename)
-                        server_file_path = shutil.move(file_path, server_crystal_pictures)
+                        #Make the tray folder in the server directory and move the file there
+                        tray_name = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        server_tray_path = os.path.join(server_crystal_pictures,tray_name)
+                        os.makedirs(server_tray_path,exist_ok=True)
+                        server_file_path = shutil.move(file_path, server_tray_path)
+                        #Update the hyperlink in the CrystalDex Library
                         ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
                         ws = self.wb[ws_title]
                         cell_id = self.picture_upload_filenames.get(image_filename)[1]
@@ -353,6 +359,7 @@ class CrystalDex_main:
                             ws[cell_id].hyperlink = server_file_path
                             self.wb.save(filename=os.path.abspath(CrystalDex_library))
                             self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
+                            #Update the hyperlink in the Crystal Sendoff Sheet
                             if 'harvested' in image_filename:
                                 for x in range(2,301):
                                     cell_id = f'B{x}'
@@ -964,8 +971,12 @@ class CrystalDex_main:
             for x in range(7):
                 picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
                 picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
-                
-            self.wb.save(filename=os.path.abspath(CrystalDex_library))
+
+            if self.server_uploading:
+                self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
+            else:
+                self.wb.save(filename=os.path.abspath(CrystalDex_library))
 
             for filename in os.listdir(desktop):
                 file_path = os.path.join(desktop, filename)
