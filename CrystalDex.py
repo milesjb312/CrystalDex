@@ -347,13 +347,13 @@ class CrystalDex_main:
                         #Locate the file in the working directory
                         file_path = os.path.join(crystal_pictures, image_filename)
                         #Make the tray folder in the server directory and move the file there
-                        tray_name = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        ws = self.wb[ws_title]
+                        tray_name = str(ws['A1'].value)
                         server_tray_path = os.path.join(server_crystal_pictures,tray_name)
                         os.makedirs(server_tray_path,exist_ok=True)
                         server_file_path = shutil.move(file_path, server_tray_path)
                         #Update the hyperlink in the CrystalDex Library
-                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
-                        ws = self.wb[ws_title]
                         cell_id = self.picture_upload_filenames.get(image_filename)[1]
                         if not self.box_uploading:#This is added because if the user is in fact uploading to box, the link that would be put in here would be useless to them.
                             ws[cell_id].hyperlink = server_file_path
