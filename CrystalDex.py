@@ -511,7 +511,7 @@ class CrystalDex_main:
         crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
         crystal_screen_label.grid(column=1,row=7,sticky='N,W')
         crystal_screen_var = tk.StringVar()
-        crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=self.crystal_screen_values)
+        crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=self.crystal_screen_values,state="readonly")
         crystal_screen_drop_down.grid(column=2,row=7)
 
         target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
@@ -585,7 +585,7 @@ class CrystalDex_main:
             st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
             st_name_label.grid(column=0,row=0)
         tray_name = tk.StringVar()
-        st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()))
+        st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()),state="readonly")
         st_name_combobox.grid(column=0,row=1)
         
         #If the user is certain that none of the trays that show up are theirs:
@@ -815,19 +815,19 @@ class CrystalDex_main:
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
         well_row_label.grid(column=1,row=2)
         well_row_values = ['A','B','C','D','E','F','G','H']
-        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_row'],values=well_row_values)
+        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_row'],values=well_row_values,state='readonly')
         well_row_drop_down.grid(column=2,row=2)
 
         well_column_label = ttk.Label(subwell_frame,text="Well column:")
         well_column_label.grid(column=1,row=3)
         well_column_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
-        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_column'],values=well_column_values)
+        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['well_column'],values=well_column_values,state='readonly')
         well_column_drop_down.grid(column=2,row=3)
 
         subwell_values = ['top_left','top_right','bottom_left']
         subwell_label = ttk.Label(subwell_frame,text="subwell:")
         subwell_label.grid(column=1,row=4)
-        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['subwell'],values=subwell_values)
+        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['subwell'],values=subwell_values,state='readonly')
         subwell_drop_down.grid(column=2,row=4)
 
         crystal_width_label = ttk.Label(subwell_frame,text='crystal width:')
@@ -885,7 +885,7 @@ class CrystalDex_main:
                     vials_available.remove(y)
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
-            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['vial'],values=vials_available)
+            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['vial'],values=vials_available,state='readonly')
             vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
@@ -931,6 +931,15 @@ class CrystalDex_main:
         time.sleep(0.1)
         print(f'monitor mouse is done.')
 
+    def fix_file(self,filename):
+        messaged = False
+        for indexed_tray in self.wb:
+            if indexed_tray.title.lower() in filename.lower():
+                messaged = True
+                messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
+        if not messaged:
+            messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
+
     def take_picture(
             self,
             ws,
@@ -944,7 +953,10 @@ class CrystalDex_main:
         if self.harvesting:
             image_title = image_title+'_harvested'
 
-        def take_take_picture():
+        row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
+        column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
+
+        def take_take_picture(column,row):
             self.SeBaView_wrapper.maximize()
             self.SeBaView_wrapper.set_focus()
             lock_mouse(duration=0.5)
@@ -955,8 +967,6 @@ class CrystalDex_main:
             time.sleep(0.1)
             self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-            row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
-            column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
             picture_link_cell = ws[f'{column}{row}']
             if self.subwell_vars['subwell'].get()=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
@@ -965,7 +975,7 @@ class CrystalDex_main:
                 picture_link_cell = picture_link_cell.offset(row=7,column=0)
                 row = row+7
             picture_link_cell.value = image_title
-            if picture_link_cell.offset(row=1,column=0).value == "":
+            if picture_link_cell.offset(row=1,column=0).value == "" or picture_link_cell.offset(row=1,column=0).value == None:
                 picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(self.tray_vars['date_set'],"%m-%d-%Y")).days}' #might have to change the type of these variables
             picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
             picture_link_cell.offset(row=3,column=0).value = f'{self.subwell_vars['number_of_crystals'].get()}'
@@ -982,32 +992,6 @@ class CrystalDex_main:
                 self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
             else:
                 self.wb.save(filename=os.path.abspath(CrystalDex_library))
-
-            for filename in os.listdir(desktop):
-                file_path = os.path.join(desktop, filename)
-                #Try to move all picture files that are on the desktop and that were put there within the last 100 seconds into Crystal_Pictures:
-                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
-                    try:
-                        shutil.move(file_path, crystal_pictures)
-                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
-                    except Exception as e:
-                        print(f"Failed to move {filename}: {e}")
-                        print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                        self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
-                """
-                else:
-                    messaged = False
-                    for indexed_tray in self.wb:
-                        if indexed_tray.title.lower() in filename.lower():
-                            messaged = True
-                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
-                    if not messaged:
-                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
-                """
-            if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
-                self.measure_tool_window.destroy()
-            self.reset_subwell_vars()
-            self.root.after_idle(self.refocus)
             
         if self.harvesting:
             if self.crystal_size[1] != 0:
@@ -1016,7 +1000,7 @@ class CrystalDex_main:
                 crystal_cell = self.sendoff_sheet[cell_id]
                 crystal_cell.value = image_title
                 condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
-                if crystal_cell.offset(row=0,column=1).value == "":
+                if crystal_cell.offset(row=0,column=1).value == "" or crystal_cell.offset(row=0,column=1).value==None:
                     crystal_cell.offset(row=0,column=1).value = condition
                     crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
                     crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
@@ -1030,10 +1014,10 @@ class CrystalDex_main:
                     icon = tk.PhotoImage(file=icon_path)
                     self.harvest_error.iconphoto(True,icon)
                     self.harvest_error.title("Harvesting Error")
-                    self.harvest_error.geometry(f'{200}x{200}+{self.screen_width/2-100}+{self.screen_height/2-100}')
+                    self.harvest_error.geometry(f'{200}x{200}+{int(self.screen_width/2-100)}+{int(self.screen_height/2-100)}')
                     vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway?")
                     vial_full_label.grid(column=0,row=0)
-                    vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=vial_clear)
+                    vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=lambda:vial_clear)
                     vial_clear_button.grid(column=1,row=0)
                     
                     def vial_clear():
@@ -1046,35 +1030,30 @@ class CrystalDex_main:
                         crystal_cell.offset(row=0,column=7).value = notes
                         self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
                         self.harvest_error.destroy()
-                    
+
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
 
-            for filename in os.listdir(desktop):
-                file_path = os.path.join(desktop, filename)
-                if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
-                    try:
-                        shutil.move(file_path, crystal_pictures)
-                        self.picture_upload_filenames[filename] = [ws.title,f'{self.subwell_vars['well_column'].get()}{self.subwell_vars['well_row'].get()}']
-                    except Exception as e:
-                        print(f"Failed to move {filename}: {e}")
-                        print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                        self.picture_upload_filenames[filename] = [ws.title,f'{self.subwell_vars['well_column'].get()}{self.subwell_vars['well_row'].get()}']
-                elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
-                    messaged = False
-                    for indexed_tray in self.wb:
-                        if indexed_tray.title.lower() in filename.lower():
-                            messaged = True
-                            messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
-                    if not messaged:
-                        messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the folder that uploads to Box. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
-                            
-            if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
-                self.measure_tool_window.destroy()
-            self.reset_subwell_vars()
-            self.root.after_idle(self.refocus)
-            
-        take_take_picture()
+        if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
+            self.measure_tool_window.destroy()
+
+        take_take_picture(column,row)
+        
+        for filename in os.listdir(desktop):
+            file_path = os.path.join(desktop, filename)
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
+                try:
+                    shutil.move(file_path, crystal_pictures)
+                    self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                except Exception as e:
+                    print(f"Failed to move {filename}: {e}")
+                    print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
+                    self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+            elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
+                self.fix_file(filename)
+
+        self.reset_subwell_vars()
+        self.root.after_idle(self.refocus)
 
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope in Dr. Moody's lab at BYU.
