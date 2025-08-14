@@ -963,6 +963,12 @@ class CrystalDex_main:
             time.sleep(0.1)
             self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
             pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
+            crystals_found = str(ws['K2'].value)
+            if crystals_found != "None":
+                crystals_found = crystals_found + f", {self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}{self.subwell_vars['subwell'].get()}"
+            else:
+                crystals_found = f"{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}{self.subwell_vars['subwell'].get()}"
+            ws['K2'].value = crystals_found
             picture_link_cell = ws[f'{column}{row}']
             if self.subwell_vars['subwell'].get()=='top_right':
                 picture_link_cell = picture_link_cell.offset(row=0,column=2)
