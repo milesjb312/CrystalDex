@@ -671,17 +671,14 @@ class CrystalDex_main:
             'chaperone':chaperone,
             'custom_tags':custom_tags
         }
+
         tray = tray
         if tray==None:
-            indexable = False
-            if self.tray_vars['crystal_screen'] in self.crystal_screens.keys():
-                indexable = True
-            else: 
+            indexable = True
+            if self.tray_vars['crystal_screen'] not in self.crystal_screens.keys():
                 messagebox.showerror(title="Crystal Screen Does Not Exist",message="The crystal screen you attempted to reference does not exist.")
                 indexable = False
-            if self.tray_vars['target_protein'] is not None:
-                indexable = True
-            else:
+            if self.tray_vars['target_protein'] == None:
                 messagebox.showerror(title="No Protein Target",message="You neglected to enter a protein target. (CrystalDex can't index nothingness!)")
                 indexable = False
             if self.tray_vars['custom_tags'] is not None:
@@ -709,7 +706,6 @@ class CrystalDex_main:
                         self.Index_Tray(tray)
                     except ValueError:
                         messagebox.showerror(title='Bad Title',message="You tried to use a special character in one of your tray descriptors. Try again with none of the following: ()/.:;'*?\"")
-                        self.startup()
         else:
             self.Index_Tray(tray)
 
