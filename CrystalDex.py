@@ -97,6 +97,7 @@ class CrystalDex_main:
         self.server_uploading = True
         self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
         self.tray_names = {}
+        self.filtered_tray_names = {}
         self.crystal_size = [0,0]
         self.harvesting = False
         self.editing = False
@@ -575,6 +576,37 @@ class CrystalDex_main:
         st_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
+        def filter_trays(date=None,screen=None,target_protein=None):
+            self.filtered_tray_names.clear()
+            if date!=None and date!="":
+                for ws in self.wb:
+                    if date in ws.title:
+                        self.filtered_tray_names[str(ws['A1'].value)] = ws.title
+            if screen!=None and screen!="":
+                screen = screen[-2::]
+                if date!=None and date!="":
+                    for ws in self.wb:
+                        if screen not in ws.title:
+                            self.filtered_tray_names.pop(str(ws['A1'].value),None)
+                else:
+                    for ws in self.wb:
+                        if screen in ws:
+                            self.filtered_tray_names[str(ws['A1'].value)] = ws.title
+            if target_protein!=None and target_protein!="":
+                print(f'target protein not none! target_protein: {target_protein}')
+                if date!=None and date!="" or screen!=None and screen!="":
+                    for ws in self.wb:
+                        if target_protein not in str(ws['D4'].value):
+                            self.filtered_tray_names.pop(str(ws['A1'].value),None)
+                else:
+                    for ws in self.wb:
+                        if target_protein in str(ws['D4'].value):
+                            self.filtered_tray_names[str(ws['A1'].value)] = ws.title
+            elif (date==None or date=="") and (screen==None or screen=="") and (target_protein==None or target_protein==""):
+                self.filtered_tray_names = self.tray_names
+            st_name_combobox.configure(values=list(self.filtered_tray_names.keys()))
+            print(f'self.filtered_tray_names: {self.filtered_tray_names}')
+
         if not self.editing and not self.harvesting:
             st_name_label = ttk.Label(st_frame,text=(
                 'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
@@ -582,17 +614,39 @@ class CrystalDex_main:
             ))
             st_name_label.grid(column=0,row=0)
         else:
-            st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
-            st_name_label.grid(column=0,row=0)
+            date_filter_label = tk.Label(st_frame,text="Filter by date set:")
+            date_filter_label.grid(column=0,row=0)
+            date_filter = tk.StringVar()
+            #(datetime.now().strftime('%m-%d-%Y'))
+            date_entry = tk.Entry(st_frame, textvariable=date_filter)
+            date_entry.grid(column=1,row=0)
+
+            screen_filter_label = tk.Label(st_frame,text="Filter by crystal screen:")
+            screen_filter_label.grid(column=0,row=1)
+            screen_filter = tk.StringVar()
+            crystal_screen_drop_down = ttk.Combobox(st_frame,textvariable=screen_filter,values=self.crystal_screen_values,state="readonly")
+            crystal_screen_drop_down.grid(column=1,row=1)
+
+            target_protein_filter_label = tk.Label(st_frame,text="Filter by target protein:")
+            target_protein_filter_label.grid(column=0,row=2)
+            target_protein_filter = tk.StringVar()
+            target_protein_entry = tk.Entry(st_frame,textvariable=target_protein_filter)
+            target_protein_entry.grid(column=1,row=2)
+
+        filter_button = tk.Button(st_frame,text="Filter",command=lambda:filter_trays(date_filter.get(),screen_filter.get(),target_protein_filter.get()))
+        filter_button.grid(column=0,row=3)
+
+        st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
+        st_name_label.grid(column=0,row=4)
         tray_name = tk.StringVar()
         st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()),state="readonly")
-        st_name_combobox.grid(column=0,row=1)
-        
+        st_name_combobox.grid(column=0,row=5)
+
         #If the user is certain that none of the trays that show up are theirs:
         if not self.harvesting and not self.editing:
             none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
-            none_of_the_above_label.grid(column=0,row=2)
-            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=2,sticky='W')
+            none_of_the_above_label.grid(column=0,row=6)
+            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=6,sticky='W')
         
         def make_new_tray(short_title):
             shorter_title = short_title
@@ -627,7 +681,7 @@ class CrystalDex_main:
                                                self.wb[self.tray_names[tray_name.get()]]['H3'].value,
                                                self.wb[self.tray_names[tray_name.get()]]['D2'].value,
                                                self.wb[self.tray_names[tray_name.get()]]['D5'].value,
-                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=3)
+                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=7)
         else:
             tk.Button(st_frame,text="Save selection and proceed",
             command=lambda: self.Set_Tray_Vars(self.wb[self.tray_names[tray_name.get()]]['D1'].value,
@@ -639,7 +693,7 @@ class CrystalDex_main:
                                                self.wb[self.tray_names[tray_name.get()]]['H3'].value,
                                                self.wb[self.tray_names[tray_name.get()]]['D2'].value,
                                                self.wb[self.tray_names[tray_name.get()]]['D5'].value,
-                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=3)
+                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=7)
 
         self.root.after_idle(self.refocus)
     
@@ -927,6 +981,7 @@ class CrystalDex_main:
         time.sleep(0.1)
         print(f'monitor mouse is done.')
 
+    """
     def fix_file(self,filename):
         messaged = False
         for indexed_tray in self.wb:
@@ -935,7 +990,8 @@ class CrystalDex_main:
                 messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
         if not messaged:
             messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
-
+    """
+            
     def take_picture(
             self,
             ws,
@@ -1043,7 +1099,7 @@ class CrystalDex_main:
         
         for filename in os.listdir(desktop):
             file_path = os.path.join(desktop, filename)
-            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')) and time.time() - os.path.getmtime(file_path)<100:
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')) and time.time() - os.path.getmtime(file_path)<100:
                 try:
                     shutil.move(file_path, crystal_pictures)
                     self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
@@ -1051,8 +1107,9 @@ class CrystalDex_main:
                     print(f"Failed to move {filename}: {e}")
                     print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
                     self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
-            elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp')):
-                self.fix_file(filename)
+            elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')):
+                #self.fix_file(filename)
+                pass
 
         self.reset_subwell_vars()
         self.root.after_idle(self.refocus)
