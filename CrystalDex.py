@@ -356,7 +356,7 @@ class CrystalDex_main:
                         ws = self.wb[ws_title]
                         tray_name = str(ws['A1'].value)
                         server_tray_path = os.path.join(server_crystal_pictures,tray_name)
-                        os.makedirs(server_tray_path,exist_ok=True)                        
+                        os.makedirs(server_tray_path,exist_ok=True)
                         server_file_path = shutil.move(file_path, server_tray_path)
                         #FUTURE UPDATE: If an image from the same subwell already exists, don't update the image link in the spreadsheet...
                         #previous_images = os.listdir(server_tray_path)
@@ -476,6 +476,8 @@ class CrystalDex_main:
         self.root.rowconfigure(0,weight=1)
         helpframe = ttk.Frame(self.root,padding='3 3 12 12')
         helpframe.grid(column=0,row=0,sticky='N,W,E,S')
+        def go_to_docs():
+            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open("https://github.com/milesjb312/CrystalDex")
         ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
         self.helptext = "This program functions by accessing a server or the cloud and syncing with Excel sheets that contain links to every picture you take." \
         "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
@@ -484,6 +486,7 @@ class CrystalDex_main:
         "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
         helptext_label = ttk.Label(helpframe,text=self.helptext)
         helptext_label.grid(column=0,row=1,sticky='N,E,W')
+        helptext_label.bind("<Button-1>",go_to_docs())
         self.root.after_idle(self.refocus)
 
     def New_Tray(self):
