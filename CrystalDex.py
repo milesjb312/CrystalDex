@@ -1572,6 +1572,7 @@ class CrystalDex_main:
 
             elif make_tray_copy:
                 w = 8
+                past_vars = {}
                 link = 'https://hamptonresearch.com/make-tray.php'
                 webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(link)
                 time.sleep(1)
@@ -1668,6 +1669,26 @@ class CrystalDex_main:
                 new_conditions = ['' for _ in range(96)]
                 self.condition = -1
 
+                def restore_condition_settings():
+                    pH_start_var.set(past_vars["pH_start_var"])                    
+                    pH_stop_var.set(past_vars["pH_stop_var"])
+                    buffer_var.set(past_vars["buffer_var"])
+                    buffer_start_var.set(past_vars["buffer_start_var"])
+                    buffer_stop_var.set(past_vars['buffer_stop_var'])
+                    buffer_weight_percent_var.set(past_vars['buffer_weight_percent_var'])
+                    ingredient1_var.set(past_vars['ingredient1_var'])
+                    ingredient1_start_var.set(past_vars['ingredient1_start_var'])
+                    ingredient1_stop_var.set(past_vars['ingredient1_stop_var'])
+                    ingredient1_weight_percent_var.set(past_vars['ingredient1_weight_percent_var'])
+                    ingredient2_var.set(past_vars['ingredient2_var'])
+                    ingredient2_start_var.set(past_vars['ingredient2_start_var'])
+                    ingredient2_stop_var.set(past_vars['ingredient2_stop_var'])
+                    ingredient2_weight_percent_var.set(past_vars['ingredient2_weight_percent_var'])
+                    ingredient3_var.set(past_vars['ingredient3_var'])
+                    ingredient3_start_var.set(past_vars['ingredient3_start_var'])
+                    ingredient3_stop_var.set(past_vars['ingredient3_stop_var'])
+                    ingredient3_weight_percent_var.set(past_vars['ingredient3_weight_percent_var'])
+
                 def save_condition_settings():                        
                     if self.quad == 1:
                         self.quad = 2
@@ -1736,27 +1757,48 @@ class CrystalDex_main:
                                     elif quad ==3:
                                         conditions[step*8+pH_step+52] = quads[quad][step*4+pH_step]
                         review_make_tray_copy()
+
+                    past_vars["pH_start_var"] = pH_start_var.get()
                     pH_start_var.set("")
+                    past_vars["pH_stop_var"] = pH_stop_var.get()
                     pH_stop_var.set("")
+                    past_vars["buffer_var"] = buffer_var.get()
                     buffer_var.set("")
+                    past_vars["buffer_start_var"] = buffer_start_var.get()
                     buffer_start_var.set("")
+                    past_vars['buffer_stop_var'] = buffer_stop_var.get()
                     buffer_stop_var.set("")
+                    past_vars['buffer_weight_percent_var'] = buffer_weight_percent_var.get()
                     buffer_weight_percent_var.set(False)
+                    past_vars['ingredient1_var'] = ingredient1_var.get()
                     ingredient1_var.set("")
+                    past_vars['ingredient1_start_var'] = ingredient1_start_var.get()
                     ingredient1_start_var.set("")
+                    past_vars['ingredient1_stop_var'] = ingredient1_stop_var.get()
                     ingredient1_stop_var.set("")
+                    past_vars['ingredient1_weight_percent_var'] = ingredient1_weight_percent_var.get()
                     ingredient1_weight_percent_var.set(False)
+                    past_vars['ingredient2_var'] = ingredient2_var.get()
                     ingredient2_var.set("")
+                    past_vars['ingredient2_start_var'] = ingredient2_start_var.get()
                     ingredient2_start_var.set("")
+                    past_vars['ingredient2_stop_var'] = ingredient2_stop_var.get()
                     ingredient2_stop_var.set("")
+                    past_vars['ingredient2_weight_percent_var'] = ingredient2_weight_percent_var.get()
                     ingredient2_weight_percent_var.set(False)
+                    past_vars['ingredient3_var'] = ingredient3_var.get()
                     ingredient3_var.set("")
+                    past_vars['ingredient3_start_var'] = ingredient3_start_var.get()
                     ingredient3_start_var.set("")
+                    past_vars['ingredient3_stop_var'] = ingredient3_stop_var.get()
                     ingredient3_stop_var.set("")
+                    past_vars['ingredient3_weight_percent_var'] = ingredient3_weight_percent_var.get()
                     ingredient3_weight_percent_var.set(False)
 
                 save_condition_settings_button = tk.Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
                 save_condition_settings_button.grid(row=13,column=0)
+                restore_condition_settings_button = tk.Button(optimization_screen_frame,text='Copy last conditions',command=restore_condition_settings)
+                restore_condition_settings_button.grid(row=14,column=0)
 
                 def review_make_tray_copy():
                     self.clear_widgets()
