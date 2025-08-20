@@ -477,8 +477,13 @@ class CrystalDex_main:
         helpframe = ttk.Frame(self.root,padding='3 3 12 12')
         helpframe.grid(column=0,row=0,sticky='N,W,E,S')
         ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
-        helptext = "This program functions by accessing a server or the cloud and syncing with Excel sheets that contain links to every picture you take.\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal.\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken.\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). \nFor more assistance, reach out to miles.j.bradford@outlook.com"
-        ttk.Label(helpframe,text=helptext).grid(column=0,row=1,sticky='N,E,W')
+        self.helptext = "This program functions by accessing a server or the cloud and syncing with Excel sheets that contain links to every picture you take." \
+        "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
+        "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
+        "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
+        "\nFor more assistance, reach out to miles.j.bradford@outlook.com"
+        helptext_label = ttk.Label(helpframe,text=self.helptext)
+        helptext_label.grid(column=0,row=1,sticky='N,E,W')
         self.root.after_idle(self.refocus)
 
     def New_Tray(self):
@@ -1049,7 +1054,7 @@ class CrystalDex_main:
                 self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
             else:
                 self.wb.save(filename=os.path.abspath(CrystalDex_library))
-            
+
         if self.harvesting:
             if self.crystal_size[1] != 0:
                 #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
@@ -1443,7 +1448,7 @@ class CrystalDex_main:
 
                     tk.Button(optimization_screen_frame,text='Look up new reference',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=0,column=1,sticky='N,W')
 
-                    ttk.Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells.").grid(row=5,column=0,columnspan=5,sticky='N,W')
+                    ttk.Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells. Do not include units in the concentration cells; all units are in molarity or weight percent.").grid(row=5,column=0,columnspan=5,sticky='N,W')
                     ttk.Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0,columnspan=5,sticky='N,W')
 
                     ttk.Label(optimization_screen_frame,text='Steps (optional, default is 1):').grid(row=8,column=0)
@@ -1574,8 +1579,7 @@ class CrystalDex_main:
                 self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
                 optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')#the full sticky means this fills the master frame.
-                ttk.Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible.").grid(row=5,column=0,columnspan=5,sticky='N,W')
-
+                ttk.Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible. Do not include units in the concentration cells; all units are in molarity or weight percent.").grid(row=5,column=0,columnspan=5,sticky='N,W')
                 ttk.Label(optimization_screen_frame,text='Lowest pH (leave empty if not tracked):').grid(row=8,column=1)
                 pH_start_var = tk.StringVar()
                 pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var,width=w)
