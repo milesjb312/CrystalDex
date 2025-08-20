@@ -481,7 +481,7 @@ class CrystalDex_main:
         "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
         "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
         "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
-        "\nFor more assistance, reach out to miles.j.bradford@outlook.com"
+        "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
         helptext_label = ttk.Label(helpframe,text=self.helptext)
         helptext_label.grid(column=0,row=1,sticky='N,E,W')
         self.root.after_idle(self.refocus)
