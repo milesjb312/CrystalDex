@@ -249,6 +249,11 @@ class CrystalDex_main:
             #Access Crystal_Sendoff_Sheet from the server:
             self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(server_Crystal_Sendoff))
             self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
+            self.vials_available = list(range(2,301))
+            for y in range(2,301):
+                cell_id = f'B{y}'
+                if self.sendoff_sheet[cell_id].value != None:
+                    self.vials_available.remove(y)
             #Access Crystal_Screens.json from the server:
             self.crystal_screen_values = []
             self.crystal_screen_symbols = {}
@@ -302,7 +307,6 @@ class CrystalDex_main:
                             if 'harvested' in image_filename:
                                 for x in range(2,301):
                                     cell_id = f'B{x}'
-                                    print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
                                     if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
                                         self.sendoff_sheet[cell_id].hyperlink = shared_link_url
                             self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
@@ -366,7 +370,6 @@ class CrystalDex_main:
                             if 'harvested' in image_filename:
                                 for x in range(2,301):
                                     cell_id = f'B{x}'
-                                    print(f'image_filename: {os.path.splitext(image_filename)[0]}, cell content: {self.sendoff_sheet[cell_id].value}') #the splitext lets me truncate the file type off.
                                     if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
                                         self.sendoff_sheet[cell_id].hyperlink = server_file_path
                             self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
@@ -593,7 +596,6 @@ class CrystalDex_main:
                         if screen in ws:
                             self.filtered_tray_names[str(ws['A1'].value)] = ws.title
             if target_protein!=None and target_protein!="":
-                print(f'target protein not none! target_protein: {target_protein}')
                 if date!=None and date!="" or screen!=None and screen!="":
                     for ws in self.wb:
                         if target_protein not in str(ws['D4'].value):
@@ -605,7 +607,6 @@ class CrystalDex_main:
             elif (date==None or date=="") and (screen==None or screen=="") and (target_protein==None or target_protein==""):
                 self.filtered_tray_names = self.tray_names
             st_name_combobox.configure(values=list(self.filtered_tray_names.keys()))
-            print(f'self.filtered_tray_names: {self.filtered_tray_names}')
 
         if not self.editing and not self.harvesting:
             st_name_label = ttk.Label(st_frame,text=(
@@ -833,6 +834,7 @@ class CrystalDex_main:
         self.subwell_vars['subwell'].set(self.last_subwell_vars['subwell'])
         self.subwell_vars['crystal_width'].set(self.last_subwell_vars['crystal_width'])
         self.subwell_vars['crystal_height'].set(self.last_subwell_vars['crystal_height'])
+        self.crystal_size = [self.subwell_vars['crystal_width'].get(),self.subwell_vars['crystal_height'].get()]
         self.subwell_vars['number_of_crystals'].set(self.last_subwell_vars['number_of_crystals'])
         self.subwell_vars['shape'].set(self.last_subwell_vars['shape'])
         self.subwell_vars['possible_salt_crystals'].set(self.last_subwell_vars['possible_salt_crystals'])
@@ -840,7 +842,7 @@ class CrystalDex_main:
         self.subwell_vars['microcrystals'].set(self.last_subwell_vars['microcrystals'])
         self.subwell_vars['glassy_protein_or_artifacts'].set(self.last_subwell_vars['glassy_protein_or_artifacts'])
         self.subwell_vars['harvester'].set(self.last_subwell_vars['harvester'])
-        self.subwell_vars['vial'].set(self.last_subwell_vars['vial'])
+        #self.subwell_vars['vial'].set(self.last_subwell_vars['vial']) this one causes issues
 
     def identify_subwell(self,ws):
         self.clear_widgets()
@@ -928,15 +930,10 @@ class CrystalDex_main:
             harvester_entry = ttk.Entry(subwell_frame,textvariable=self.subwell_vars['harvester'])
             harvester_entry.grid(column=2,row=13)
 
-            vials_available = list(range(2,301))
-            for y in range(2,301):
-                cell_id = f'B{y}'
-                if self.sendoff_sheet[cell_id].value != None:
-                    vials_available.remove(y)
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
-            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['vial'],values=vials_available,state='readonly')
-            vial_dropdown.grid(column=2,row=14)
+            self.vial_dropdown = ttk.Combobox(subwell_frame,textvariable=self.subwell_vars['vial'],values=self.vials_available,state='readonly')
+            self.vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
         notes_label.grid(column=1,row=13+x)
@@ -951,11 +948,13 @@ class CrystalDex_main:
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
 
         if self.harvesting:
-            tk.Button(subwell_frame,text='Harvest crystal',
+            self.harvest_crystal_button = tk.Button(subwell_frame,text='Harvest crystal',
                     command=lambda: self.take_picture(
                         ws,
-                        notes.get(1.0,tk.END)
-                    )).grid(column=1,row=16+x)
+                        notes.get(1.0,tk.END),
+                        harvester=self.subwell_vars['harvester'].get()
+                    ),state="disabled")
+            self.harvest_crystal_button.grid(column=1,row=16+x)
         else:
             tk.Button(subwell_frame,text='Take and save picture',
                     command=lambda: self.take_picture(
@@ -991,7 +990,7 @@ class CrystalDex_main:
         if not messaged:
             messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
     """
-            
+
     def take_picture(
             self,
             ws,
@@ -1056,9 +1055,9 @@ class CrystalDex_main:
                 #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
                 cell_id = f'B{str(self.subwell_vars['vial'].get())}'
                 crystal_cell = self.sendoff_sheet[cell_id]
-                crystal_cell.value = image_title
-                condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
                 if crystal_cell.offset(row=0,column=1).value == "" or crystal_cell.offset(row=0,column=1).value==None:
+                    crystal_cell.value = image_title
+                    condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
                     crystal_cell.offset(row=0,column=1).value = condition
                     crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
                     crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
@@ -1073,12 +1072,21 @@ class CrystalDex_main:
                     self.harvest_error.iconphoto(True,icon)
                     self.harvest_error.title("Harvesting Error")
                     self.harvest_error.geometry(f'{200}x{200}+{int(self.screen_width/2-100)}+{int(self.screen_height/2-100)}')
-                    vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway?")
+
+                    vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway or select a different vial.")
                     vial_full_label.grid(column=0,row=0)
-                    vial_clear_button = tk.Button(self.harvest_error,text="Rewrite",command=lambda:vial_clear)
-                    vial_clear_button.grid(column=1,row=0)
+                    vial_overwrite_button = tk.Button(self.harvest_error,text="Rewrite",command=lambda:vial_overwrite)
+                    vial_overwrite_button.grid(column=0,row=1)
+
+                    new_vial = tk.StringVar()
+                    different_vial_dropdown = ttk.Combobox(self.harvest_error,textvariable=new_vial,values=self.vials_available,state='readonly')
+                    different_vial_dropdown.grid(column=0,row=2)
+                    select_different_vial_button = tk.Button(self.harvest_error,text="Choose different vial",command=lambda:switch_vial())
+                    select_different_vial_button.grid(column=1,row=2)
                     
-                    def vial_clear():
+                    def vial_overwrite():
+                        crystal_cell.value = image_title
+                        condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
                         crystal_cell.offset(row=0,column=1).value = condition
                         crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
                         crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
@@ -1089,9 +1097,29 @@ class CrystalDex_main:
                         self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
                         self.harvest_error.destroy()
 
+                    def switch_vial():
+                        cell_id = f'B{str(new_vial.get())}'
+                        crystal_cell = self.sendoff_sheet[cell_id]
+                        crystal_cell.value = image_title
+                        condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]        
+                        crystal_cell.offset(row=0,column=1).value = condition
+                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
+                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
+                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
+                        crystal_cell.offset(row=0,column=5).value = harvester
+                        crystal_cell.offset(row=0,column=6).value = f'{self.tray_vars['date_set']}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
+                        crystal_cell.offset(row=0,column=7).value = notes
+                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
+                        self.harvest_error.destroy()
+                self.vials_available = list(range(2,301))
+                for y in range(2,301):
+                    cell_id = f'B{y}'
+                    if self.sendoff_sheet[cell_id].value != None:
+                        self.vials_available.remove(y)
+                self.vial_dropdown.config(values=self.vials_available)
+                self.harvest_crystal_button.config(state='disabled')
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
-
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
 
@@ -1130,6 +1158,7 @@ class CrystalDex_main:
         self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
         self.measure_tool_window.resizable(tk.FALSE,tk.FALSE)
         self.measure_tool_window.attributes('-alpha','0.1')
+            
         measure_tool = tk.Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
         measure_tool.pack(fill='both',expand=True)
         self.mouse_pressed = False
@@ -1157,6 +1186,8 @@ class CrystalDex_main:
                     self.measure_tool_window.focus_force()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
                     self.crystal_size[1] = int((((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
+                    if hasattr(self,"harvest_crystal_button"):
+                        self.harvest_crystal_button.configure(state="normal")
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
                     self.measure_tool_window.focus_force()
