@@ -1352,7 +1352,7 @@ class CrystalDex_main:
         for any Make Tray optimizations that have conditions that are optimized in a non-linear manner."""
         self.clear_widgets()
         self.add_menu()
-        self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
@@ -1382,7 +1382,7 @@ class CrystalDex_main:
             self.two_code = two_code
             self.clear_widgets()
             self.add_menu()
-            self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+            self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
             optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
@@ -1395,7 +1395,7 @@ class CrystalDex_main:
         def show_entry_fields(make_tray_copy):
             self.clear_widgets()
             self.add_menu()
-            self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+            self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
             optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
             if not make_tray_copy:
@@ -1426,7 +1426,7 @@ class CrystalDex_main:
                                 self.selected_condition.set(f'{lookup_conditions[index]}')
                                 self.clear_widgets()
                                 self.add_menu()
-                                self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+                                self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
                                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
                                 optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
                                 show_entry_fields(make_tray_copy=make_tray_copy)
@@ -1571,7 +1571,7 @@ class CrystalDex_main:
                 webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(link)
                 time.sleep(1)
                 self.root.after_idle(self.refocus)
-                self.root.geometry(f'{self.screen_width//2}x{self.screen_height}+0+0')#Not sure why this line doesn't work
+                self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
                 optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
                 optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')#the full sticky means this fills the master frame.
                 ttk.Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible.").grid(row=5,column=0,columnspan=5,sticky='N,W')
@@ -1739,7 +1739,7 @@ class CrystalDex_main:
                 def review_make_tray_copy():
                     self.clear_widgets()
                     self.add_menu()
-                    self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
+                    self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
                     optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
                     optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
@@ -1790,5 +1790,8 @@ class CrystalDex_main:
             with open(server_crystal_screens_path, "w") as c:
                 json.dump(self.crystal_screens, c)
             self.splash()
-            threading.Thread(target=self.Box_Save,daemon=True).start()
+            if self.box_uploading:
+                threading.Thread(target=self.Box_Save,daemon=True).start()
+            if self.server_uploading:
+                threading.Thread(target=self.Server_Save,daemon=True).start()
             self.startup()
