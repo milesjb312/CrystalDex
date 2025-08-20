@@ -1067,6 +1067,7 @@ class CrystalDex_main:
                     crystal_cell.offset(row=0,column=7).value = notes
                     self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
                 else:
+                    #Strictly speaking, it should be impossible for the user to find this. I'm not sure though. And it only halfway works. So hopefully they don't!
                     self.harvest_error = tk.Toplevel(self.root)
                     icon = tk.PhotoImage(file=icon_path)
                     self.harvest_error.iconphoto(True,icon)
