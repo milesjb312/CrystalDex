@@ -492,6 +492,7 @@ class CrystalDex_main:
     def New_Tray(self):
         self.clear_widgets()
         self.add_menu()
+        self.reload_crystal_screens()
         new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
         new_tray_frame.grid(column=0,row=0,sticky='N,W')
         self.root.columnconfigure(0,weight=1)
