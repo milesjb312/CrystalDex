@@ -1015,8 +1015,15 @@ class CrystalDex_main:
 
         row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
         column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
-
-        def take_take_picture(column,row):
+        picture_link_cell = ws[f'{column}{row}']
+        if self.subwell_vars['subwell'].get()=='top_right':
+            picture_link_cell = picture_link_cell.offset(row=0,column=2)
+            column = px.utils.get_column_letter(px.utils.column_index_from_string(column)+2)
+        elif self.subwell_vars['subwell'].get()=='bottom_left':
+            picture_link_cell = picture_link_cell.offset(row=7,column=0)
+            row = row+7
+        
+        def take_take_picture():
             self.SeBaView_wrapper.maximize()
             self.SeBaView_wrapper.set_focus()
             lock_mouse(duration=0.5)
@@ -1033,13 +1040,6 @@ class CrystalDex_main:
             else:
                 crystals_found = f"{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}{self.subwell_vars['subwell'].get()}"
             ws['K2'].value = crystals_found
-            picture_link_cell = ws[f'{column}{row}']
-            if self.subwell_vars['subwell'].get()=='top_right':
-                picture_link_cell = picture_link_cell.offset(row=0,column=2)
-                column = px.utils.get_column_letter(px.utils.column_index_from_string(column)+2)
-            elif self.subwell_vars['subwell'].get()=='bottom_left':
-                picture_link_cell = picture_link_cell.offset(row=7,column=0)
-                row = row+7
             picture_link_cell.value = image_title
             if picture_link_cell.offset(row=1,column=0).value == "" or picture_link_cell.offset(row=1,column=0).value == None:
                 picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(self.tray_vars['date_set'],"%m-%d-%Y")).days}' #might have to change the type of these variables
@@ -1054,10 +1054,15 @@ class CrystalDex_main:
                 picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
 
             if self.server_uploading:
-                self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
-            else:
-                self.wb.save(filename=os.path.abspath(CrystalDex_library))
+                try:
+                    
+                    self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
+                except Exception as e:
+                    print(f'{e}')
+                    messagebox.showerror(title='CrystalDex Library In Use',message="You or someone on the server currently has the CrystalDex Library open. CrystalDex cannot write to an open file. Please ask them to close the file or wait until later." \
+                    "\nOne good way to handle this is for the person who is not currently taking pictures to make a temporary copy of the CrystalDex Library for review purposes only.")
+
+            self.wb.save(filename=os.path.abspath(CrystalDex_library))
 
         if self.harvesting:
             if self.crystal_size[1] != 0:
@@ -1133,7 +1138,7 @@ class CrystalDex_main:
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
 
-        take_take_picture(column,row)
+        take_take_picture()
         
         for filename in os.listdir(desktop):
             file_path = os.path.join(desktop, filename)
