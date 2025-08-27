@@ -354,7 +354,7 @@ class CrystalDex_main:
                 if image_filename in self.picture_upload_filenames.keys():
                     try:
                         #Make the tray folder in the server directory and move the file there
-                        ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
+                        ws_title = f'{self.picture_upload_filenames[image_filename][0]}'
                         ws = self.wb[ws_title]
                         tray_name = str(ws['A1'].value)
                         server_tray_path = os.path.join(server_crystal_pictures,tray_name)
@@ -363,7 +363,7 @@ class CrystalDex_main:
                         #FUTURE UPDATE: If an image from the same subwell already exists, don't update the image link in the spreadsheet...
                         #previous_images = os.listdir(server_tray_path)
                         #Update the hyperlink in the CrystalDex Library
-                        cell_id = self.picture_upload_filenames.get(image_filename)[1]
+                        cell_id = self.picture_upload_filenames[image_filename][1]
                         if not self.box_uploading:#This is added because if the user is in fact uploading to box, the link that would be put in here would be useless to them.
                             ws[cell_id].hyperlink = server_file_path
                             self.wb.save(filename=os.path.abspath(CrystalDex_library))
@@ -1157,9 +1157,7 @@ class CrystalDex_main:
                     shutil.move(file_path, crystal_pictures)
                     self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
                 except Exception as e:
-                    print(f"Failed to move {filename}: {e}")
-                    print(f'Still placing filename within self.picture_upload_filenames to be uploaded.')
-                    self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
+                    messagebox.showerror(title="Failed to Upload a File",message=f"CrystalDex couldn't move the file: {filename} into its internal resources because of the error: {e}")
             elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')):
                 #self.fix_file(filename)
                 pass
