@@ -278,8 +278,15 @@ class CrystalDex_main:
 
     def refocus(self):
         """Refocus the window if minimized"""
+        #Tkinter internal focusing:
         self.root.deiconify()
         self.root.lift()
+        self.root.focus_force()
+        #Global focusing via pywinauto:
+        self.root_window.restore()
+        pywinauto.keyboard.send_keys('%')
+        self.root_window.set_focus()
+        print(f'Refocused')
 
     def Server_Save(self):
         """This method allows users to upload both pictures and workbooks."""
@@ -378,10 +385,15 @@ class CrystalDex_main:
                             self.sendoff_workbook.save(filename=os.path.abspath(server_Crystal_Sendoff))
                     except Exception as e:
                         print(f'Error uploading {image_filename}: {e}')
-                        messagebox.showerror(title='Uploading Error',message='Your picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
+                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
                         server_file_path = shutil.move(file_path, unlinked_pictures_path)
                 else:
-                    server_file_path = shutil.move(file_path, unlinked_pictures_path)
+                    try:
+                        server_file_path = shutil.move(file_path, unlinked_pictures_path)
+                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
+                    except Exception as e:
+                        messagebox.showerror(title='Uploading Error',message='A picture for which you do not have permissions is stuck inside the internal resources of CrystalDex. You will need an admin to delete it.')
+                        pass
         
         try:
             if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
@@ -457,6 +469,9 @@ class CrystalDex_main:
         self.add_menu()
         startup = ttk.Frame(self.root,padding='5 5 20 20')
         self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
+        self.root_winfo_id = self.root.winfo_id()
+        self.root_wrapper = Application().connect(handle=self.root_winfo_id)
+        self.root_window = self.root_wrapper.window()
         startup.option_add('*tearOFF',tk.FALSE)
         startup.grid(column=0,row=0,sticky='N,E,S,W')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
@@ -1065,7 +1080,6 @@ class CrystalDex_main:
 
             if self.server_uploading:
                 try:
-                    
                     self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
                 except Exception as e:
                     print(f'{e}')
