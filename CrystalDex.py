@@ -53,6 +53,8 @@ splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
 server_crystal_pictures = os.path.join(server_CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
+unlinked_pictures_path = os.path.join(server_CrystalDex_dir,"Crystal_Pictures","Unlinked_Pictures")
+os.makedirs(unlinked_pictures_path,exist_ok=True)
 CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
 server_CrystalDex_library = os.path.join(server_CrystalDex_dir,"CrystalDex_Library.xlsx")
 Crystal_Sendoff = os.path.join(script_dir,'Resources','Crystal_Sendoff_Sheet.xlsx')
@@ -347,10 +349,10 @@ class CrystalDex_main:
                 )
         if self.server_uploading:
             for image_filename in os.listdir(crystal_pictures):
+                #Locate the file in the working directory
+                file_path = os.path.join(crystal_pictures, image_filename)
                 if image_filename in self.picture_upload_filenames.keys():
                     try:
-                        #Locate the file in the working directory
-                        file_path = os.path.join(crystal_pictures, image_filename)
                         #Make the tray folder in the server directory and move the file there
                         ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
                         ws = self.wb[ws_title]
@@ -376,6 +378,11 @@ class CrystalDex_main:
                             self.sendoff_workbook.save(filename=os.path.abspath(server_Crystal_Sendoff))
                     except Exception as e:
                         print(f'Error uploading {image_filename}: {e}')
+                        messagebox.showerror(title='Uploading Error',message='Your picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
+                        server_file_path = shutil.move(file_path, unlinked_pictures_path)
+                else:
+                    server_file_path = shutil.move(file_path, unlinked_pictures_path)
+
         
         if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
             self.root.after(0,self.splash_win.destroy)
@@ -453,9 +460,6 @@ class CrystalDex_main:
         tk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
-
-        self.root.after_idle(self.refocus)
-        self.root.mainloop() #This has to be the last line of code in the startup function (it can't be placed anywhere before SeBaView is loaded)
 
     def add_menu(self):
         menu = tk.Menu(self.root)
