@@ -382,12 +382,14 @@ class CrystalDex_main:
                         server_file_path = shutil.move(file_path, unlinked_pictures_path)
                 else:
                     server_file_path = shutil.move(file_path, unlinked_pictures_path)
-
         
-        if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
-            self.root.after(0,self.splash_win.destroy)
-        else:
-            self.startup()
+        try:
+            if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
+                self.root.after(0,self.splash_win.destroy)
+            else:
+                self.startup()
+        except Exception:
+            pass
 
     def splash(self):
         self.splash_win = tk.Toplevel(self.root)
@@ -441,6 +443,10 @@ class CrystalDex_main:
             print(f'Failed to close SeBaView. Do it please!')
         self.root.destroy()
 
+    def restart(self):
+        self.Server_Save()
+        self.startup()
+
     def startup(self):
         self.harvesting = False
         self.editing = False
@@ -463,7 +469,7 @@ class CrystalDex_main:
 
     def add_menu(self):
         menu = tk.Menu(self.root)
-        menu.add_command(label='Home',command=self.startup)
+        menu.add_command(label='Home',command=self.restart)
         menu.add_command(label="Help",command=self.Help)
         self.root.config(menu=menu)
 
