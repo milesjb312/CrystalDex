@@ -355,6 +355,7 @@ class CrystalDex_main:
                     )
                 )
         if self.server_uploading:
+            non_permissible = False
             for image_filename in os.listdir(crystal_pictures):
                 #Locate the file in the working directory
                 file_path = os.path.join(crystal_pictures, image_filename)
@@ -385,15 +386,16 @@ class CrystalDex_main:
                             self.sendoff_workbook.save(filename=os.path.abspath(server_Crystal_Sendoff))
                     except Exception as e:
                         print(f'Error uploading {image_filename}: {e}')
-                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
+                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It will be placed in the Unlinked_Pictures path.')
                         server_file_path = shutil.move(file_path, unlinked_pictures_path)
                 else:
                     try:
                         server_file_path = shutil.move(file_path, unlinked_pictures_path)
-                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It has been placed in the Unlinked_Pictures path.')
+                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It will be placed in the Unlinked_Pictures path.')
                     except Exception as e:
-                        messagebox.showerror(title='Uploading Error',message='A picture for which you do not have permissions is stuck inside the internal resources of CrystalDex. You will need an admin to delete it.')
-                        pass
+                        non_permissible = True
+            if non_permissible:
+                messagebox.showerror(title='Uploading Error',message='One or more pictures for which you do not have permissions is stuck inside the internal resources of CrystalDex. You will need an admin to delete it/them.')
         
         try:
             if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
