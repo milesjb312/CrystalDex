@@ -33,7 +33,7 @@ import webbrowser
 import psutil
 import pywinauto
 import pyperclip
-from pywinauto.application import Application
+from pywinauto import Application
 import pyautogui
 from pynput import mouse
 import pywinauto.keyboard
@@ -424,27 +424,48 @@ class CrystalDex_main:
                 title="Select the SeBaView executable",
                 filetypes=[("Executable files", "*.exe")]
             )
-        if exe_path:
-            with open(SeBaView_path, "w") as s:
-                json.dump({"SeBaView_path": exe_path}, s)
-            self.SeBaView = Application(backend="uia").start(exe_path)
-            time.sleep(4)
+        if not exe_path:
+            print(f'User cancelled the SeBaView path lookup.')
+            return
+        
+        #Save the path.
+        with open(SeBaView_path, "w") as s:
+            json.dump({"SeBaView_path": exe_path}, s)
+        
+        exe_name = os.path.basename(exe_path)
+        for proc in psutil.process_iter(["name","pid"]):
             try:
-                SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
-                self.SeBaView_wrapper = SeBaView_main_window.wrapper_object()
-                self.SeBaView_wrapper.maximize()
-                self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
-                self.SeBaView_wrapper.set_focus()
+                if proc.info["name"] and proc.info["name"].lower() == exe_name.lower():
+                    print(f'Closing already running {exe_name} (PID {proc.pid}).')
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                        time.sleep(1)
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                    break
+            except (psutil.NoSuchProcess,psutil.AccessDenied):
+                continue
+        
+        print(f'Starting {exe_name}.')
+        self.SeBaView = Application(backend="uia").start(exe_path)
+        time.sleep(4)
+        try:
+            SeBaView_main_window = self.SeBaView.window(title_re=".*SeBaView.*")
+            self.SeBaView_wrapper = SeBaView_main_window.wrapper_object()
+            self.SeBaView_wrapper.maximize()
+            self.SeBaView_wrapper_rect = self.SeBaView_wrapper.rectangle()
+            self.SeBaView_wrapper.set_focus()
+            time.sleep(0.1)
+            for i in range(2):
+                lock_mouse(duration=0.5)
                 time.sleep(0.1)
-                for i in range(2):
-                    lock_mouse(duration=0.5)
-                    time.sleep(0.1)
-                    self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting tk.Button.
-                self.SeBaView_wrapper.minimize()
-                self.opened_microscope_app = True
-            except Exception as e:
-                print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
-                print(f"Error: {e}")
+                self.SeBaView_wrapper.click_input(coords=(60, 165))  #This accesses the camera connecting tk.Button.
+            self.SeBaView_wrapper.minimize()
+            self.opened_microscope_app = True
+        except Exception as e:
+            print("Failed to find or focus the SeBaView window. Restarting your computer usually fixes this issue.") #Change this to a Tkinter messagebox
+            print(f"Error: {e}")
         self.root.after(0,self.splash_win.destroy)
         self.root.after_idle(self.refocus)
 
