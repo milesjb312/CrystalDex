@@ -37,4 +37,3 @@ elif __name__ == '__main__':
     app.startup()
     app.root.after_idle(app.refocus)
     app.root.mainloop()
-    app.Server_Save()
