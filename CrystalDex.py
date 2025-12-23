@@ -11,6 +11,7 @@ import pandas as pd
 
 import sqlite3
 import openpyxl
+from openpyxl.utils import get_column_letter,column_index_from_string
 #from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
@@ -710,9 +711,7 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name))
         return screen_id
 
     def Upload_Crystal_Screen(self):
-        """This method allows users to upload a crystal screen directly from Hampton's data sheets. It doesn't always work, but it does luckily have a method for overwriting
-        the results before you save the crystal screen. NOTE: There is currently no way for users to delete crystal screens. I may need to add this later.
-        """
+        """This method allows users to upload a crystal screen directly from Hampton's data sheets."""
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
@@ -735,51 +734,32 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name))
         upload_crystal_screen_button.grid(column=4,row=0,sticky='N,W')
         upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
 
-        conditions = ['' for _ in range(96)]
-
         def scrape_crystal_screen_data():
+            conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
-                    title="Select the pdf containing the crystal screen conditions",
-                    filetypes=[('PDF files',"*.pdf")]
+                    title="Select the excel workbook containing the crystal screen conditions",
+                    filetypes=[("*.xlsx")]
                 )
-            text = ""
-            with pdfplumber.open(crystal_screen_path) as pdf:
-                for page in pdf.pages:
-                    text += page.extract_text() + "\n"
-
-                if not any(keyword in text for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                    print(f"No text found. If you're trying to use Make Tray from Hampton, use the Optimization tk.Button on the home screen instead.")
-
-            last_condition = 0
-            offset = 0
-            for condition in range(96):
-                if conditions[condition].strip():
-                    last_condition = condition
-                    offset = 1
-
-            for condition in range(96):
-                next_condition = str(condition+2)
-                reading = False
-                for line in text.splitlines():
-                    if line.startswith(f'{condition+1}.'):
-                        line = line.strip()
-                        if (any(keyword in line.lower() for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium'])) or all(keyword in line.lower() for keyword in ['ph',' m ']):
-                            try:
-                                conditions[condition+last_condition+offset] = line
-                                reading = True
-                            except IndexError:
-                                messagebox.showerror(title='Too many conditions',message=f'There were too many conditions to add to the new screen. Please review the upload.')
-                                break
-                                #Note that this is a very rough fix to the problem.
-                    elif reading and not line.startswith(f'{next_condition}.'):
-                            if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                                conditions[condition+last_condition+offset] += ' ' + line
-                    elif reading and line.startswith(f'{next_condition}.'):
-                        reading = False
+            
+            with openpyxl.open(crystal_screen_path,read_only=True) as cswb:
+                sheet_names = cswb.get_sheet_names()
+                formulation_sheet = cswb[sheet_names[0]]
+                print(f'formulation_sheet.title: {formulation_sheet.title}')
+                for row in range(6,110):
+                    cellA = f'A{row}'
+                    if formulation_sheet[cellA].value not in [None,0]:
+                        condition = ""
+                        for c in range(1,19):
+                            column=get_column_letter(c)
+                            refcell = f'{column}4'
+                            cell = f'{column}{row}'
+                            condition = condition+formulation_sheet[refcell].value+":"+formulation_sheet[cell].value
+                        condition_number = row-5
+                        conditions[condition_number] = condition
 
             listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
-            listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
+            listbox_values = [f"{c}: {condition}" for c, condition in enumerate(conditions)]
             condition_var = tk.StringVar(value=listbox_values)
             conditions_listbox = tk.Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
