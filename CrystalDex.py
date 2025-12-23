@@ -10,7 +10,7 @@ import json
 import pandas as pd
 
 import sqlite3
-import openpyxl as px
+import openpyxl
 #from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
@@ -65,11 +65,13 @@ desktop = os.path.expanduser("~/Desktop")
 def connect_to_db():
     return sqlite3.connect("CrystalDex.db")
 
-#conn = connect_to_db()
-#cur = conn.cursor()
-#cur.execute()
-#conn.commit()
-#conn.close()
+conn = connect_to_db()
+cur = conn.cursor()
+cur.execute("""
+
+""")
+conn.commit()
+conn.close()
 
 def get_trays(id=None,
             date_set=None,
@@ -177,9 +179,10 @@ class CrystalDex_main:
         self.opened_microscope_app = False
 
         #Window management inits
+        self.root.update_idletasks()
         self.root_winfo_id = self.root.winfo_id()
-        self.root_wrapper = Application().connect(handle=self.root_winfo_id)
-        self.root_window = self.root_wrapper.window()
+        self.root_wrapper = Application(backend="win32").connect(handle=self.root_winfo_id)
+        self.root_window = self.root_wrapper.window(handle=self.root_winfo_id)
 
     def splash(self):
         self.splash_win = tk.Toplevel(self.root)
@@ -190,19 +193,16 @@ class CrystalDex_main:
         ttk.Label(self.splash_win,text='Loading CrystalDex: DO NOT MOVE THE MOUSE!!!',image=self.splash_image).pack(expand=True)
         self.splash_win.attributes('-topmost',True)
         self.splash_win.lift()
-        self.splash_win.focus_force()
+        self.splash_win.focus_set()
 
     def refocus(self):
         """Refocus the root window if minimized. Whatever frame is currently active will still be visible."""
         #Tkinter internal focusing:
         self.root.deiconify()
         self.root.lift()
-        self.root.focus_force()
-        #Global focusing via pywinauto:
-        self.root_window.restore()
+        self.root.focus_set()
+        self.root.state("zoomed")
         pywinauto.keyboard.send_keys('%')
-        self.root_window.set_focus()
-        print(f'Refocused')
 
         try:
             if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
@@ -665,7 +665,7 @@ class CrystalDex_main:
         self.line_end = None
         self.measure_tool_window.deiconify()
         self.measure_tool_window.lift()
-        self.measure_tool_window.focus_force() #so that when users click and drag, they don't have to click twice on the screen first.
+        self.measure_tool_window.focus_set() #so that when users click and drag, they don't have to click twice on the screen first.
 
         def poll_mouse():
             nonlocal measure_tool
@@ -682,20 +682,32 @@ class CrystalDex_main:
                     self.crystal_size[0] = int((((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
-                    self.measure_tool_window.focus_force()
+                    self.measure_tool_window.focus_set()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
                     self.crystal_size[1] = int((((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     if hasattr(self,"harvest_crystal_button"):
                         self.harvest_crystal_button.configure(state="normal")
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
-                    self.measure_tool_window.focus_force()
+                    self.measure_tool_window.focus_set()
             if self.crystal_size[1] == 0:
                 self.measure_tool_window.after(50,poll_mouse)
             else:
                 if callable(function_to_run):
                     function_to_run()
         poll_mouse()
+
+    def add_crystal_screen(self,name):
+        """This creates a new crystal screen in the database and returns the screen_id. It is usually called by the Upload_Crystal_Screen function and routes back
+        into the same function to provide a location for the individual well conditions to be provided."""
+        conn = connect_to_db()
+        cur = conn.cursor()
+        cur.execute("""
+INSERT INTO crystal_screens (name) VALUES (?)""",(name))
+        screen_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return screen_id
 
     def Upload_Crystal_Screen(self):
         """This method allows users to upload a crystal screen directly from Hampton's data sheets. It doesn't always work, but it does luckily have a method for overwriting
@@ -805,13 +817,17 @@ class CrystalDex_main:
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             
             def save_screens():
-                """self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
-                with open(crystal_screens_path, "w") as c:
-                    json.dump(self.crystal_screens, c)
-                self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
-                
-                Change this so that it uploads this information to the database instead of into a .json.
-                """
+                screen_id = self.add_crystal_screen(crystal_screen_name.get())#this both creates the crystal_screen and provides the id
+                conn = connect_to_db()
+                cur = conn.cursor()
+                for i, condition in enumerate(conditions,start=1):
+                    cur.execute(
+                        "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                        (screen_id, i, condition)
+                    )
+                conn.commit()
+                conn.close()
+                self.startup()
                 
             tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save_screens).grid(row=5,column=2)
 
@@ -1309,4 +1325,17 @@ class CrystalDex_main:
                             
                     tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
 
-                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=self.startup).grid(row=5,column=3)
+                    def save_screens():
+                        screen_id = self.add_crystal_screen(long_name.get())#this both creates the crystal_screen and provides the id
+                        conn = connect_to_db()
+                        cur = conn.cursor()
+                        for i, condition in enumerate(conditions,start=1):
+                            cur.execute(
+                                "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                                (screen_id, i, condition)
+                            )
+                        conn.commit()
+                        conn.close()
+                        self.startup()
+
+                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save_screens).grid(row=5,column=3)
