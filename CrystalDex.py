@@ -60,26 +60,40 @@ Crystal_Sendoff = os.path.join(CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
 crystal_screens_path = os.path.join(CrystalDex_dir,"Crystal_Screens.json")
 desktop = os.path.expanduser("~/Desktop")
 
+"""DATABASE MANAGEMENT FUNCTIONS"""
+
 def connect_to_db():
     return sqlite3.connect("CrystalDex.db")
 
-def add_tray(name, date_set, screen, top_left=0, top_right=0, bottom_left=0):
-    conn = connect_to_db()
-    conn.execute("""
-    INSERT INTO crystal_trays
-    (name, date, screen, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (name,date_set,screen,top_left,top_right,bottom_left))
-    conn.commit()
-    conn.close()
+#conn = connect_to_db()
+#cur = conn.cursor()
+#cur.execute()
+#conn.commit()
+#conn.close()
 
-def get_trays(name=None,date_set=None,screen=None,chaperone=None):
+def get_trays(id=None,
+            date_set=None,
+            chaperone=None,
+            crystal_screen=None,
+            protein=None,
+            custom_tags=None,
+            top_left_protein_concentration=None,
+            top_right_protein_concentration=None,
+            bottom_left_protein_concentration=None):
     """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
     conn = connect_to_db()
     cur = conn.cursor()
 
     cur.execute("""
-                SELECT id, name, date_set, screen
+                SELECT id,
+                date_set,
+                chaperone,
+                crystal_screen,
+                protein,
+                custom_tags,
+                top_left_protein_concentration,
+                top_right_protein_concentration,
+                bottom_left_protein_concentration
                 FROM crystal_trays
                 ORDER BY date_set DESC
                 """)
@@ -91,16 +105,17 @@ def update_excel():
     conn = connect_to_db()
 
     df = pd.read_sql_query("""
-    SELECT
-        name,
-        date_set,
-        screen,
-        top_left_protein_concentration,
-        top_right_protein_concentration,
-        bottom_left_protein_concentration
-    FROM crystal_trays
-    ORDER BY date_set, name
-    """, conn)
+                           SELECT id,
+                            date_set,
+                            chaperone,
+                            crystal_screen,
+                            protein,
+                            custom_tags,
+                            top_left_protein_concentration,
+                            top_right_protein_concentration,
+                            bottom_left_protein_concentration
+                            FROM crystal_trays
+                            ORDER BY date_set DESC""", conn)
     conn.close()
 
     with pd.ExcelWriter(local_library, engine="openpyxl") as writer:
@@ -111,6 +126,8 @@ def update_excel():
                 sheet_name=sheet_name,
                 index=False
             )
+
+"""MICROSCOPE APP FUNCTIONS"""
 
 #In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
 def on_click(x,y,button,pressed):
@@ -129,7 +146,11 @@ def lock_mouse(duration=0.5):
             time.sleep(0.0001)  # super tight loop
     threading.Thread(target=lock, daemon=True).start()
 
+"""MAIN APPLICATION"""
+
 class CrystalDex_main:
+    """This is the main class of CrystalDex, containing all the variables that it must pass between different functions, particularly variables that are
+    obtained from the user in various tkinter frames or variables involved in window management for the GUI or for the microscope application."""
     def __init__(self):
         self.crystal_size = [0,0]
         self.picture_upload_filenames = {}
@@ -145,16 +166,34 @@ class CrystalDex_main:
         self.screen_height = self.root.winfo_screenheight()
         self.root.minsize(self.screen_width//5,600)
         self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
+
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
+
         #Track which frame you're in:
         self.current_frame = None
         self.opened_microscope_app = False
 
+        #Window management inits
+        self.root_winfo_id = self.root.winfo_id()
+        self.root_wrapper = Application().connect(handle=self.root_winfo_id)
+        self.root_window = self.root_wrapper.window()
+
+    def splash(self):
+        self.splash_win = tk.Toplevel(self.root)
+        self.splash_win.overrideredirect(True)
+        self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-510//2}')
+        splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
+        self.splash_image = tk.PhotoImage(file=splash_path)
+        ttk.Label(self.splash_win,text='Loading CrystalDex: DO NOT MOVE THE MOUSE!!!',image=self.splash_image).pack(expand=True)
+        self.splash_win.attributes('-topmost',True)
+        self.splash_win.lift()
+        self.splash_win.focus_force()
+
     def refocus(self):
-        """Refocus the window if minimized"""
+        """Refocus the root window if minimized. Whatever frame is currently active will still be visible."""
         #Tkinter internal focusing:
         self.root.deiconify()
         self.root.lift()
@@ -168,19 +207,58 @@ class CrystalDex_main:
         try:
             if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
                 self.root.after(0,self.splash_win.destroy)
-            else:
-                self.startup()
         except Exception:
             pass
 
-    def splash(self):
-        self.splash_win = tk.Toplevel(self.root)
-        self.splash_win.overrideredirect(True)
-        self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-510//2}')
-        splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
-        self.splash_image = tk.PhotoImage(file=splash_path)
-        ttk.Label(self.splash_win,text='Loading CrystalDex: DO NOT MOVE THE MOUSE!!!',image=self.splash_image).pack(expand=True)
-        self.splash_win.attributes('-topmost',True)
+    def add_menu(self):
+        menu = tk.Menu(self.root)
+        menu.add_command(label='Home',command=self.startup)
+        menu.add_command(label="Help",command=self.Help)
+        self.root.config(menu=menu)
+
+    def clear_widgets(self):
+        for widget in self.root.winfo_children():
+            if isinstance(widget,ttk.Frame):
+                widget.destroy()
+
+    def Help(self):
+        self.clear_widgets()
+        self.add_menu()
+        self.root.columnconfigure(0,weight=1)
+        self.root.rowconfigure(0,weight=1)
+        helpframe = ttk.Frame(self.root,padding='3 3 12 12')
+        helpframe.grid(column=0,row=0,sticky='N,W,E,S')
+        def go_to_docs():
+            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open("https://github.com/milesjb312/CrystalDex")
+        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
+        helptext = "This program functions by accessing a server or the cloud and syncing with an sqlite database that contain links to every picture you take." \
+        "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
+        "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
+        "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
+        "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
+        helptext_label = ttk.Label(helpframe,text=helptext)
+        helptext_label.grid(column=0,row=1,sticky='N,E,W')
+        helptext_label.bind("<Button-1>",go_to_docs())
+        self.root.after_idle(self.refocus)
+
+    def startup(self):
+        self.clear_widgets()
+        if not self.opened_microscope_app:
+            self.splash()
+            threading.Thread(target=self.load_SeBaView,daemon=True).start()
+        self.add_menu()
+        startup = ttk.Frame(self.root,padding='5 5 20 20')
+        self.current_frame = startup
+        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
+        startup.option_add('*tearOFF',tk.FALSE)
+        startup.grid(column=0,row=0,sticky='N,E,S,W')
+        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
+        #https://tkdocs.com/tutorial/text.html#basics
+        tk.Button(startup,text="Index Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Edit Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvest"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
 
     def load_SeBaView(self):
         """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
@@ -248,81 +326,37 @@ class CrystalDex_main:
             print(f'Failed to close SeBaView. Do it please!')
         self.root.destroy()
 
-    def restart(self):
-        self.startup()
-
-    def startup(self):
-        if not self.opened_microscope_app:
-            self.splash()
-            threading.Thread(target=self.load_SeBaView,daemon=True).start()
-        self.clear_widgets()
-        self.add_menu()
-        startup = ttk.Frame(self.root,padding='5 5 20 20')
-        self.current_frame = startup
-        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
-        self.root_winfo_id = self.root.winfo_id()
-        self.root_wrapper = Application().connect(handle=self.root_winfo_id)
-        self.root_window = self.root_wrapper.window()
-        startup.option_add('*tearOFF',tk.FALSE)
-        startup.grid(column=0,row=0,sticky='N,E,S,W')
-        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
-        #https://tkdocs.com/tutorial/text.html#basics
-        tk.Button(startup,text="Index Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Edit Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvest"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
-
-    def add_menu(self):
-        menu = tk.Menu(self.root)
-        menu.add_command(label='Home',command=self.restart)
-        menu.add_command(label="Help",command=self.Help)
-        self.root.config(menu=menu)
-
-    def clear_widgets(self):
-        for widget in self.root.winfo_children():
-            if isinstance(widget,ttk.Frame):
-                widget.destroy()
-
-    def Help(self):
-        self.clear_widgets()
-        self.add_menu()
-        self.root.columnconfigure(0,weight=1)
-        self.root.rowconfigure(0,weight=1)
-        helpframe = ttk.Frame(self.root,padding='3 3 12 12')
-        helpframe.grid(column=0,row=0,sticky='N,W,E,S')
-        def go_to_docs():
-            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open("https://github.com/milesjb312/CrystalDex")
-        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
-        helptext = "This program functions by accessing a server or the cloud and syncing with an sqlite database that contain links to every picture you take." \
-        "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
-        "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
-        "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
-        "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
-        helptext_label = ttk.Label(helpframe,text=helptext)
-        helptext_label.grid(column=0,row=1,sticky='N,E,W')
-        helptext_label.bind("<Button-1>",go_to_docs())
-        self.root.after_idle(self.refocus)
+    def add_tray(self,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
+        """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it routes into the characterize_subwells function."""
+        conn = connect_to_db()
+        conn.execute("""
+        INSERT INTO crystal_trays
+        (date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+        conn.commit()
+        conn.close()
 
     def Index_Tray(self,method):
+        """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
         if method == "new":
             """Allows the user to create a new tray which will be put into the CrystalDex.db sqlite3 database.
-            Each tray contains the following information:
-            date_set
-            chaperone
-            crystal_screen
-            protein
-            custom_tags
-            protein_top_left_concentration
-            protein_top_right_concentration
-            protein_bottom_left_concentration"""
+            Format for this table is as follows:
+            CREATE TABLE crystal_trays(
+            id INTEGER PRIMARY KEY,
+            date_set TEXT NOT NULL,
+            chaperone TEXT,
+            crystal_screen TEXT NOT NULL,
+            protein TEXT NOT NULL,
+            custom_tags TEXT,
+            top_left_protein_concentration REAL NOT NULL,
+            top_right_protein_concentration REAL NOT NULL,
+            bottom_left_protein_concentration REAL NOT NULL)"""
             self.clear_widgets()
             self.add_menu()
             new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
             self.current_frame = new_tray_frame
             new_tray_frame.grid(column=0,row=0,sticky='N,W')
-            self.root.columnconfigure(0,weight=1)
-            self.root.rowconfigure(0,weight=1)
 
             ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
@@ -389,8 +423,15 @@ class CrystalDex_main:
             custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
             custom_tags_drop_down.grid(column=2,row=12)
 
-            #add_tray()
-            #characterize_subwell()
+            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(date_set_var.get(),
+                                                                                   chaperone_var.get(),
+                                                                                   crystal_screen_var.get(),
+                                                                                   protein_var.get(),
+                                                                                   custom_tags_var.get(),
+                                                                                   top_left=protein_top_left_concentration_var.get(),
+                                                                                   top_right=protein_top_right_concentration_var.get(),
+                                                                                   bottom_left=protein_bottom_left_concentration_var.get()
+                                                                                   )).grid(column=1,row=13,sticky='W')
 
             for child in new_tray_frame.winfo_children():
                 child.grid_configure(padx=5,pady=5)
@@ -398,13 +439,10 @@ class CrystalDex_main:
 
         elif method=="old" or method=="harvest":
             """This will let the user edit old trays by changing their subwell data."""
-            self.reset_subwell_vars()
             self.clear_widgets()
             self.add_menu()
             st_frame = ttk.Frame(self.root,padding="3 3 12 12")
             st_frame.grid(column=0,row=0,sticky='N,W')
-            self.root.columnconfigure(0,weight=1)
-            self.root.rowconfigure(0,weight=1)
             def filter_trays(date=None,screen=None,protein=None):
                 """This function will query the database for trays"""
                 filter_button = tk.Button(st_frame,text="Filter",command=lambda:filter_trays())
@@ -423,22 +461,24 @@ class CrystalDex_main:
             #tk.Button(st_frame,text="make new tray",command=lambda: add_tray()).grid(column=1,row=6,sticky='W')
 
     def characterize_subwell(self,tray,method):
-        """This function creates a new subwell entry in the wells table of the CrystalDex.db. Each subwell contains the following information:
-        row
-        column
-        subwell
-        conditions
-        minor_axis
-        major_axis
-        number_of_crystals
-        shape
-        possible_salt_crystals
-        precipitation
-        microcrystals
-        glassy_protein_or_artifacts
-        harvester
-        vial_and_run
-        date_snapped
+        """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
+        CREATE TABLE subwells(
+            row TEXT NOT NULL,
+            column INT NOT NULL,
+            subwell TEXT NOT NULL,
+            picture_link TEXT NOT NULL,
+            conditions TEXT NOT NULL,
+            minor_axis REAL NOT NULL,
+            major_axis REAL NOT NULL,
+            number_of_crystals INT NOT NULL,
+            shape TEXT NOT NULL,
+            possible_salt_crystals TEXT NOT NULL,
+            precipitation TEXT NOT NULL,
+            microcrystals TEXT NOT NULL,
+            glassy_protein_or_artifacts TEXT NOT NULL,
+            harvester TEXT,
+            vial_and_run TEXT,
+            date_snapped TEXT NOT NULL)
         """
         self.clear_widgets()
         self.add_menu()
@@ -598,8 +638,6 @@ class CrystalDex_main:
             elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')):
                 #self.fix_file(filename)
                 pass
-
-        self.reset_subwell_vars()
         self.root.after_idle(self.refocus)
 
     def measure_crystal(self,function_to_run):
