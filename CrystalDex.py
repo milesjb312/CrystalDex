@@ -66,6 +66,7 @@ desktop = os.path.expanduser("~/Desktop")
 def connect_to_db():
     return sqlite3.connect("CrystalDex.db")
 
+"""This is the general setup for committing things to the sqlite3 database.
 conn = connect_to_db()
 cur = conn.cursor()
 cur.execute("""
@@ -73,6 +74,7 @@ cur.execute("""
 """)
 conn.commit()
 conn.close()
+"""
 
 def get_trays(id=None,
             date_set=None,
@@ -100,7 +102,7 @@ def get_trays(id=None,
                 FROM crystal_trays
                 ORDER BY date_set DESC
                 """)
-    trays = cur.fetchall()
+    trays = [dict(row) for row in cur.fetchall()]
     conn.close()
     return trays
 
@@ -730,32 +732,33 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name))
         crystal_screen_symbol_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_symbol)
         crystal_screen_symbol_entry.grid(row=0,column=3)
 
-        upload_crystal_screen_button = tk.Button(upload_crystal_screen_frame,text=f"Upload {self.not_first}crystal screen",command=lambda: scrape_crystal_screen_data())
+        upload_crystal_screen_button = tk.Button(upload_crystal_screen_frame,text=f"Upload crystal screen",command=lambda: scrape_crystal_screen_data())
         upload_crystal_screen_button.grid(column=4,row=0,sticky='N,W')
-        upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
+        upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
         def scrape_crystal_screen_data():
             conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
-                    title="Select the excel workbook containing the crystal screen conditions",
-                    filetypes=[("*.xlsx")]
+                    title="Select the excel workbook containing the crystal screen formulation from Hampton. If the workbook contains several pages, you must consolidate them to one page with all the conditions. Delete all rows without a reagent #. Then, delete all extra worksheets."
                 )
             
-            with openpyxl.open(crystal_screen_path,read_only=True) as cswb:
-                sheet_names = cswb.get_sheet_names()
-                formulation_sheet = cswb[sheet_names[0]]
-                print(f'formulation_sheet.title: {formulation_sheet.title}')
-                for row in range(6,110):
-                    cellA = f'A{row}'
-                    if formulation_sheet[cellA].value not in [None,0]:
-                        condition = ""
-                        for c in range(1,19):
-                            column=get_column_letter(c)
-                            refcell = f'{column}4'
-                            cell = f'{column}{row}'
-                            condition = condition+formulation_sheet[refcell].value+":"+formulation_sheet[cell].value
-                        condition_number = row-5
-                        conditions[condition_number] = condition
+            cswb = openpyxl.open(crystal_screen_path,read_only=True)
+            sheet_names = cswb.sheetnames
+            formulation_sheet = cswb[sheet_names[0]]
+            print(f'formulation_sheet.title: {formulation_sheet.title}')
+            for row in range(6,110):
+                cellA = f'A{row}'
+                if formulation_sheet[cellA].value not in [None,0]:
+                    condition = ""
+                    for c in range(1,19):
+                        column=get_column_letter(c)
+                        refcell = f'{column}4'
+                        refcell2 = f'{column}5'
+                        cell = f'{column}{row}'
+                        condition = condition+str(formulation_sheet[refcell].value)+str(formulation_sheet[refcell2].value)+":"+str(formulation_sheet[cell].value+", ")
+                    print(condition)
+                    condition_number = row-5
+                    conditions[condition_number] = condition
 
             listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
