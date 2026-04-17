@@ -64,7 +64,8 @@ desktop = os.path.expanduser("~/Desktop")
 """DATABASE MANAGEMENT FUNCTIONS"""
 
 def connect_to_db():
-    return sqlite3.connect("CrystalDex.db")
+    print(os.path.join(script_dir,"CrystalDex.db"))
+    return sqlite3.connect(os.path.join(script_dir,"CrystalDex.db"))
 
 def reset_db():
     #This is for resetting the database. The method should not be accessed outside development.
@@ -72,7 +73,9 @@ def reset_db():
     cur = conn.cursor()#Cursor object
     cur.executescript("""
     BEGIN;
-    DROP TABLE IF EXISTS screen_conditions;
+    DROP TABLE IF EXISTS crystal_screens;
+    DROP TABLE IF EXISTS conditions;
+    DROP TABLE IF EXISTS crystal_trays;
     DROP TABLE IF EXISTS subwells;
     COMMIT;
     """)
@@ -81,14 +84,20 @@ def reset_db():
     cur.executescript("""
     BEGIN;
     PRAGMA foreign_keys = ON;
-    CREATE TABLE screen_conditions(
+    CREATE TABLE crystal_screens(
                 id INTEGER PRIMARY KEY,
-                screen_id INTEGER NOT NULL,
+                crystal_screen TEXT NOT NULL,
+                crystal_screen_symbol TEXT NOT NULL);
+    CREATE TABLE conditions(
+                id INTEGER PRIMARY KEY,
+                crystal_screen_id INTEGER NOT NULL,
                 condition_number INTEGER NOT NULL,
-                condition TEXT NOT NULL);
+                condition TEXT NOT NULL,
+                FOREIGN KEY (crystal_screen_id) REFERENCES crystal_screens(id)
+                ON DELETE CASCADE);
     CREATE TABLE crystal_trays(
                 id INTEGER PRIMARY KEY,
-                screen_id INTEGER NOT NULL,
+                crystal_screen_id INTEGER NOT NULL,
                 date_set TEXT NOT NULL,
                 chaperone TEXT,
                 crystal_screen TEXT NOT NULL,
@@ -96,9 +105,7 @@ def reset_db():
                 custom_tags TEXT,
                 top_left_protein_concentration REAL NOT NULL,
                 top_right_protein_concentration REAL NOT NULL,
-                bottom_left_protein_concentration REAL NOT NULL,
-                FOREIGN KEY (screen_id) REFERENCES screen_conditions(id)
-                ON DELETE CASCADE);
+                bottom_left_protein_concentration REAL NOT NULL);
     CREATE TABLE subwells(
                 id INTEGER PRIMARY KEY,
                 tray_id INTEGER NOT NULL,
@@ -118,14 +125,25 @@ def reset_db():
                 harvester TEXT,
                 vial_and_run TEXT,
                 date_snapped TEXT NOT NULL,
-                FOREIGN KEY (tray_id) REFERENCES crystal_trays(id));
+                FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
+                ON DELETE CASCADE);
     COMMIT;
     """)
-
     conn.commit()
     conn.close()
 
-reset_db()
+#reset_db()
+
+def get_crystal_screens():
+    """Get a list of all crystal screens and their ids."""
+    conn = connect_to_db()
+    cur = conn.cursor()
+    cur.execute("""SELECT id, crystal_screen FROM crystal_screens""")
+    crystal_screens = {}
+    for r in cur.fetchall():
+        crystal_screens[r[1]] = r[0]
+    conn.close()
+    return crystal_screens
 
 def get_trays(args_dict=None):
     """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
@@ -168,10 +186,24 @@ def get_values(value=None):
     return values
 
 def update_excel():
+    """This will update the excel mirror that reflects what's going on in the CrystalDex.db database.
+    For reference, this is how the crystal_trays table is made:
+        CREATE TABLE crystal_trays(
+                id INTEGER PRIMARY KEY,
+                crystal_screen_id INTEGER NOT NULL,
+                date_set TEXT NOT NULL,
+                chaperone TEXT,
+                crystal_screen TEXT NOT NULL,
+                protein TEXT NOT NULL,
+                custom_tags TEXT,
+                top_left_protein_concentration REAL NOT NULL,
+                top_right_protein_concentration REAL NOT NULL,
+                bottom_left_protein_concentration REAL NOT NULL);
+    """
     conn = connect_to_db()
 
-    df = pd.read_sql_query("""
-                           SELECT id,
+    df = pd.read_sql_query("""SELECT id,
+                            crystal_screen_id,
                             date_set,
                             chaperone,
                             crystal_screen,
@@ -390,16 +422,33 @@ class CrystalDex_main:
             print(f'Failed to close SeBaView. Do it please!')
         self.root.destroy()
 
-    def add_tray(self,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
-        """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it routes into the characterize_subwells function."""
+    def add_tray(self,crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
+        """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it 
+        routes into the characterize_subwells function.
+        For reference, this is how the crystal_trays table is made:
+        CREATE TABLE crystal_trays(
+                id INTEGER PRIMARY KEY,
+                crystal_screen_id INTEGER NOT NULL,
+                date_set TEXT NOT NULL,
+                chaperone TEXT,
+                crystal_screen TEXT NOT NULL,
+                protein TEXT NOT NULL,
+                custom_tags TEXT,
+                top_left_protein_concentration REAL NOT NULL,
+                top_right_protein_concentration REAL NOT NULL,
+                bottom_left_protein_concentration REAL NOT NULL);
+        """
         conn = connect_to_db()
-        conn.execute("""
+        cur = conn.cursor()
+        cur.execute("""
         INSERT INTO crystal_trays
-        (date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+        (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+        tray_id = cur.lastrowid
         conn.commit()
         conn.close()
+        self.characterize_subwell(tray_id,method="new")
 
     def Index_Tray(self,method):
         """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
@@ -437,7 +486,8 @@ class CrystalDex_main:
             crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
             crystal_screen_label.grid(column=1,row=7,sticky='N,W')
             crystal_screen_var = tk.StringVar()
-            crystal_screen_values = get_trays()
+            crystal_screen_dict = get_crystal_screens()
+            crystal_screen_values = list(crystal_screen_dict.keys())
             crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=crystal_screen_values,state="readonly")
             crystal_screen_drop_down.grid(column=2,row=7)
 
@@ -476,7 +526,8 @@ class CrystalDex_main:
             custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
             custom_tags_drop_down.grid(column=2,row=12)
 
-            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(date_set_var.get(),
+            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(crystal_screen_dict[crystal_screen_var.get()],
+                                                                                    date_set_var.get(),
                                                                                    chaperone_var.get(),
                                                                                    crystal_screen_var.get(),
                                                                                    protein_var.get(),
@@ -513,7 +564,7 @@ class CrystalDex_main:
                 none_of_the_above_label.grid(column=0,row=6)
             #tk.Button(st_frame,text="make new tray",command=lambda: add_tray()).grid(column=1,row=6,sticky='W')
 
-    def characterize_subwell(self,tray,method):
+    def characterize_subwell(self,tray_id,method):
         """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
         CREATE TABLE subwells(
             row TEXT NOT NULL,
@@ -649,7 +700,6 @@ class CrystalDex_main:
 
     def take_picture(self, notes, method, harvester):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
-
         #image_title = f'{self.tray_vars['chaperone']}_{self.tray_vars['protein']}_{self.tray_vars['crystal_screen']}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{self.tray_vars['date_set']}_{self.subwell_vars['date_snapped']}'
         if method=="harvesting":
             image_title = image_title+'_harvested'
@@ -750,18 +800,6 @@ class CrystalDex_main:
                     function_to_run()
         poll_mouse()
 
-    def add_crystal_screen(self,name):
-        """This creates a new crystal screen in the database and returns the screen_id. It is usually called by the Upload_Crystal_Screen function and routes back
-        into the same function to provide a location for the individual well conditions to be provided."""
-        conn = connect_to_db()
-        cur = conn.cursor()
-        cur.execute("""
-INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
-        screen_id = cur.lastrowid
-        conn.commit()
-        conn.close()
-        return screen_id
-
     def Upload_Crystal_Screen(self):
         """This method allows users to upload a crystal screen directly from Hampton's data sheets."""
         self.clear_widgets()
@@ -787,39 +825,41 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
         upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
         def scrape_crystal_screen_data():
+            conn = connect_to_db()
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
+            conn.commit()
+            conn.close()
+
             conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
                     title="Select the excel workbook containing the crystal screen formulation from Hampton. If the workbook contains several pages, you must consolidate them to one page with all the conditions. Delete all rows without a reagent #. Then, delete all extra worksheets."
                 )
             
-            cswb = openpyxl.open(crystal_screen_path,read_only=True)
+            cswb = openpyxl.load_workbook(crystal_screen_path,read_only=True)
             sheet_names = cswb.sheetnames
             formulation_sheet = cswb[sheet_names[0]]
             print(f'formulation_sheet.title: {formulation_sheet.title}')
-            for row in range(6,110):
-                cellA = f'A{row}'
-                if formulation_sheet[cellA].value not in [None,0]:
-                    condition = ""
-                    for c in range(1,19):
-                        column=get_column_letter(c)
-                        refcell = f'{column}4'
-                        ref1 = formulation_sheet[refcell].value
-                        refcell2 = f'{column}5'
-                        ref2 = formulation_sheet[refcell2].value
-                        refcell3 = f'{column}{row}'
-                        ref3 = formulation_sheet[refcell3].value
-                        if ref1!=None and ref2!=None and ref3!=None:
-                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
-                        elif ref1!=None and ref2==None and ref3!=None:
-                            condition = condition+str(ref1)+":"+str(ref3)+", "
-                        elif ref3!=None:
-                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
-                    condition_number = row-6
+            for row in formulation_sheet.iter_rows(min_row=6, max_row=109, min_col=1, max_col=21):
+                if row[0].value not in [None, 0]:
+                    refs = []
+                    for c, cell in enumerate(row, start=1):
+                        col_letter = get_column_letter(c)
+                        ref = cell.value
+                        ref_pH = formulation_sheet[f'{col_letter}4'].value
+                        if ref:
+                            refs.append(str(ref))
+                        if ref_pH:
+                            if ref_pH.strip() in ['pH', 'PH', 'Ph', 'ph']:
+                                refs.insert(-1,str(ref_pH))
+
+                    condition = " ".join(refs)
+                    condition_number = row[0].row-5
                     conditions[condition_number] = condition
 
             listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
-            listbox_values = [f"{condition}" for condition in conditions]
+            listbox_values = [f"{condition}" for condition in conditions.values()]
             condition_var = tk.StringVar(value=listbox_values)
             conditions_listbox = tk.Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
@@ -835,7 +875,7 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
                 if selection:
                     index = selection[0]
                     selected_index.set(index)
-                    edited_condition.set(f'{conditions[index]}')
+                    edited_condition.set(f'{conditions[index+1]}')
 
             conditions_listbox.bind('<<ListboxSelect>>',select_condition)
 
@@ -855,15 +895,15 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
                         edited_condition.set(f'{conditions[0]}')
                     
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
-            print(str(crystal_screen_name.get()))
             def save_screens():
-                screen_id = self.add_crystal_screen(str(crystal_screen_name.get()))#this both creates the crystal_screen and provides the id
+                crystal_screens = get_crystal_screens()
+                crystal_screen_id = crystal_screens[crystal_screen_name.get()]
                 conn = connect_to_db()
                 cur = conn.cursor()
-                for i, condition in enumerate(conditions,start=1):
+                for i, condition in enumerate(conditions.values(),start=1):
                     cur.execute(
-                        "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
-                        (screen_id, i, condition)
+                        "INSERT INTO conditions (crystal_screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                        (crystal_screen_id, i, condition)
                     )
                 conn.commit()
                 conn.close()
@@ -1369,9 +1409,9 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
                         screen_id = self.add_crystal_screen(long_name.get())#this both creates the crystal_screen and provides the id
                         conn = connect_to_db()
                         cur = conn.cursor()
-                        for i, condition in enumerate(conditions,start=1):
+                        for i, condition in enumerate(conditions.values(),start=1):
                             cur.execute(
-                                "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                                "INSERT INTO conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
                                 (screen_id, i, condition)
                             )
                         conn.commit()
