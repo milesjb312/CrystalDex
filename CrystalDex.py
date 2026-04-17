@@ -66,45 +66,106 @@ desktop = os.path.expanduser("~/Desktop")
 def connect_to_db():
     return sqlite3.connect("CrystalDex.db")
 
-"""This is the general setup for committing things to the sqlite3 database.
-conn = connect_to_db()
-cur = conn.cursor()
-cur.execute("""
+def reset_db():
+    #This is for resetting the database. The method should not be accessed outside development.
+    conn = connect_to_db()#SQLite3 database connection object
+    cur = conn.cursor()#Cursor object
+    cur.executescript("""
+    BEGIN;
+    DROP TABLE IF EXISTS screen_conditions;
+    DROP TABLE IF EXISTS subwells;
+    COMMIT;
+    """)
+    conn.commit()
 
-""")
-conn.commit()
-conn.close()
-"""
+    cur.executescript("""
+    BEGIN;
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE screen_conditions(
+                id INTEGER PRIMARY KEY,
+                screen_id INTEGER NOT NULL,
+                condition_number INTEGER NOT NULL,
+                condition TEXT NOT NULL);
+    CREATE TABLE crystal_trays(
+                id INTEGER PRIMARY KEY,
+                screen_id INTEGER NOT NULL,
+                date_set TEXT NOT NULL,
+                chaperone TEXT,
+                crystal_screen TEXT NOT NULL,
+                protein TEXT NOT NULL,
+                custom_tags TEXT,
+                top_left_protein_concentration REAL NOT NULL,
+                top_right_protein_concentration REAL NOT NULL,
+                bottom_left_protein_concentration REAL NOT NULL,
+                FOREIGN KEY (screen_id) REFERENCES screen_conditions(id)
+                ON DELETE CASCADE);
+    CREATE TABLE subwells(
+                id INTEGER PRIMARY KEY,
+                tray_id INTEGER NOT NULL,
+                row TEXT NOT NULL,
+                column INT NOT NULL,
+                subwell TEXT NOT NULL,
+                picture_link TEXT NOT NULL,
+                conditions TEXT NOT NULL,
+                minor_axis REAL NOT NULL,
+                major_axis REAL NOT NULL,
+                number_of_crystals INT NOT NULL,
+                shape TEXT NOT NULL,
+                possible_salt_crystals TEXT NOT NULL,
+                precipitation TEXT NOT NULL,
+                microcrystals TEXT NOT NULL,
+                glassy_protein_or_artifacts TEXT NOT NULL,
+                harvester TEXT,
+                vial_and_run TEXT,
+                date_snapped TEXT NOT NULL,
+                FOREIGN KEY (tray_id) REFERENCES crystal_trays(id));
+    COMMIT;
+    """)
 
-def get_trays(id=None,
-            date_set=None,
-            chaperone=None,
-            crystal_screen=None,
-            protein=None,
-            custom_tags=None,
-            top_left_protein_concentration=None,
-            top_right_protein_concentration=None,
-            bottom_left_protein_concentration=None):
+    conn.commit()
+    conn.close()
+
+reset_db()
+
+def get_trays(args_dict=None):
+    """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
+    conn = connect_to_db()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    if args_dict!=None:
+        clauses = []
+        values = []
+        for column, value in args_dict.items():
+            clauses.append(f"{column} = ?")
+            values.append(value)
+
+        query = f"SELECT * FROM crystal_trays"
+
+        query += " WHERE " + " AND ".join(clauses)
+
+        query += " ORDER BY id"
+
+        cur.execute(query, values)
+        rows = [dict(row) for row in cur.fetchall()]
+        conn.close()
+    else:
+        cur.execute("SELECT * FROM crystal_trays")
+        rows = cur.fetchall()
+        conn.close()
+
+    trays = [(", ".join(item for item in row)) for row in rows]
+    return trays
+
+def get_values(value=None):
     """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
     conn = connect_to_db()
     cur = conn.cursor()
-
-    cur.execute("""
-                SELECT id,
-                date_set,
-                chaperone,
-                crystal_screen,
-                protein,
-                custom_tags,
-                top_left_protein_concentration,
-                top_right_protein_concentration,
-                bottom_left_protein_concentration
-                FROM crystal_trays
-                ORDER BY date_set DESC
-                """)
-    trays = [dict(row) for row in cur.fetchall()]
-    conn.close()
-    return trays
+    if value!=None:
+        query = f"SELECT DISTINCT {value} FROM crystal_trays"
+        cur.execute(query)
+        values = [row[0] for row in cur.fetchall()]
+        conn.close()
+    return values
 
 def update_excel():
     conn = connect_to_db()
@@ -343,18 +404,6 @@ class CrystalDex_main:
     def Index_Tray(self,method):
         """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
         if method == "new":
-            """Allows the user to create a new tray which will be put into the CrystalDex.db sqlite3 database.
-            Format for this table is as follows:
-            CREATE TABLE crystal_trays(
-            id INTEGER PRIMARY KEY,
-            date_set TEXT NOT NULL,
-            chaperone TEXT,
-            crystal_screen TEXT NOT NULL,
-            protein TEXT NOT NULL,
-            custom_tags TEXT,
-            top_left_protein_concentration REAL NOT NULL,
-            top_right_protein_concentration REAL NOT NULL,
-            bottom_left_protein_concentration REAL NOT NULL)"""
             self.clear_widgets()
             self.add_menu()
             new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
@@ -381,7 +430,7 @@ class CrystalDex_main:
             chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
             chaperone_label.grid(column=1,row=6,sticky='N,W')
             chaperone_var = tk.StringVar()
-            chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
+            chaperone_values = get_values('chaperone')
             chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=chaperone_var,values=chaperone_values)
             chaperone_drop_down.grid(column=2,row=6)
 
@@ -392,15 +441,16 @@ class CrystalDex_main:
             crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=crystal_screen_values,state="readonly")
             crystal_screen_drop_down.grid(column=2,row=7)
 
-            protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
+            protein_values = get_values('protein')#Queries the database to find all past proteins used in any crystal tray
             protein_label = ttk.Label(new_tray_frame,text="Target protein: For Moody Lab users, put FULL construct name!!! (do not use special characters /.:;'*?\")")
             protein_label.grid(column=1,row=8,sticky='N,W')
             protein_var = tk.StringVar()
             protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=protein_var,values=protein_values)
             protein_drop_down.grid(column=2,row=8,sticky='N,W')
 
-            protein_concentration_values = ['1','5','15','20']
-
+            protein_concentration_values = get_values('top_left_protein_concentration')
+            protein_concentration_values.extend(get_values('top_right_protein_concentration'))
+            protein_concentration_values.extend(get_values('bottom_left_protein_concentration'))
             protein_top_left_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
             protein_top_left_concentration_label.grid(column=1,row=9,sticky='N,W')
             protein_top_left_concentration_var = tk.StringVar()
@@ -706,7 +756,7 @@ class CrystalDex_main:
         conn = connect_to_db()
         cur = conn.cursor()
         cur.execute("""
-INSERT INTO crystal_screens (name) VALUES (?)""",(name))
+INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
         screen_id = cur.lastrowid
         conn.commit()
         conn.close()
@@ -753,16 +803,23 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name))
                     for c in range(1,19):
                         column=get_column_letter(c)
                         refcell = f'{column}4'
+                        ref1 = formulation_sheet[refcell].value
                         refcell2 = f'{column}5'
-                        cell = f'{column}{row}'
-                        condition = condition+str(formulation_sheet[refcell].value)+str(formulation_sheet[refcell2].value)+":"+str(formulation_sheet[cell].value+", ")
-                    print(condition)
-                    condition_number = row-5
+                        ref2 = formulation_sheet[refcell2].value
+                        refcell3 = f'{column}{row}'
+                        ref3 = formulation_sheet[refcell3].value
+                        if ref1!=None and ref2!=None and ref3!=None:
+                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
+                        elif ref1!=None and ref2==None and ref3!=None:
+                            condition = condition+str(ref1)+":"+str(ref3)+", "
+                        elif ref3!=None:
+                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
+                    condition_number = row-6
                     conditions[condition_number] = condition
 
             listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
-            listbox_values = [f"{c}: {condition}" for c, condition in enumerate(conditions)]
+            listbox_values = [f"{condition}" for condition in conditions]
             condition_var = tk.StringVar(value=listbox_values)
             conditions_listbox = tk.Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
@@ -798,9 +855,9 @@ INSERT INTO crystal_screens (name) VALUES (?)""",(name))
                         edited_condition.set(f'{conditions[0]}')
                     
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
-            
+            print(str(crystal_screen_name.get()))
             def save_screens():
-                screen_id = self.add_crystal_screen(crystal_screen_name.get())#this both creates the crystal_screen and provides the id
+                screen_id = self.add_crystal_screen(str(crystal_screen_name.get()))#this both creates the crystal_screen and provides the id
                 conn = connect_to_db()
                 cur = conn.cursor()
                 for i, condition in enumerate(conditions,start=1):
