@@ -4,11 +4,15 @@
 #Imports
 #General imports
 import os
-import glob
+#import glob
 import shutil
 import json
-import openpyxl as px
-from openpyxl.styles import PatternFill
+import pandas as pd
+
+import sqlite3
+import openpyxl
+from openpyxl.utils import get_column_letter,column_index_from_string
+#from openpyxl.styles import PatternFill
 from datetime import datetime
 import time
 import threading
@@ -23,8 +27,8 @@ from tkinter import filedialog
 
 #Box integration imports:
 #https://github.com/box/box-python-sdk-gen/tree/main
-import box_sdk_gen
-from box_sdk_gen import BoxClient, BoxOAuth, OAuthConfig, FileTokenStorage, BoxSDKError, UploadFileAttributes, UploadFileAttributesParentField
+#import box_sdk_gen
+#from box_sdk_gen import BoxClient, BoxOAuth, OAuthConfig, FileTokenStorage, BoxSDKError, UploadFileAttributes, UploadFileAttributesParentField
 import webbrowser
 
 #SebaView integration imports:
@@ -32,7 +36,7 @@ import webbrowser
 #https://pywinauto.readthedocs.io/en/latest/getting_started.html
 import psutil
 import pywinauto
-import pyperclip
+#import pyperclip
 from pywinauto import Application
 import pyautogui
 from pynput import mouse
@@ -47,42 +51,157 @@ import pdfplumber
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
 server_dir = os.path.dirname(os.path.abspath("Z:"))
-server_CrystalDex_dir = os.path.join(server_dir,"CrystalDex")
-icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
-splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
+CrystalDex_dir = os.path.join(server_dir,"CrystalDex")
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
-server_crystal_pictures = os.path.join(server_CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
-unlinked_pictures_path = os.path.join(server_CrystalDex_dir,"Crystal_Pictures","Unlinked_Pictures")
-os.makedirs(unlinked_pictures_path,exist_ok=True)
-CrystalDex_library = os.path.join(script_dir,'Resources',"CrystalDex_Library.xlsx")
-server_CrystalDex_library = os.path.join(server_CrystalDex_dir,"CrystalDex_Library.xlsx")
-Crystal_Sendoff = os.path.join(script_dir,'Resources','Crystal_Sendoff_Sheet.xlsx')
-server_Crystal_Sendoff = os.path.join(server_CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
-crystal_screens_path = os.path.join(script_dir,'Resources','Crystal_Screens.json')
-server_crystal_screens_path = os.path.join(server_CrystalDex_dir,"Crystal_Screens.json")
-SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
-home = os.path.expanduser("~")
-downloads = os.path.join(home, "Downloads")
+server_crystal_pictures = os.path.join(CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
+local_library = os.path.join(script_dir,"CrystalDex_Library.xlsx")
+CrystalDex_Library = os.path.join(CrystalDex_dir,"CrystalDex_Library.xlsx")
+Crystal_Sendoff = os.path.join(CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
+crystal_screens_path = os.path.join(CrystalDex_dir,"Crystal_Screens.json")
 desktop = os.path.expanduser("~/Desktop")
 
-#Dictionaries:
-subwell_to_condition_dict = {
-                f"{row}{col}": i
-                for i,(row, col) in enumerate(
-                    (r, c) for r in "ABCDEFGH" for c in range(1, 13)
-                )
-            }
+"""DATABASE MANAGEMENT FUNCTIONS"""
 
-well_to_excel_dict = {'A':8,'B':23,'C':38,'D':53,'E':68,'F':83,'G':98,'H':113,'1':'C','2':'H','3':'M','4':'R','5':'W','6':'AB','7':'AG','8':'AL','9':'AQ','10':'AV','11':'BA','12':'BF'}
+def connect_to_db():
+    return sqlite3.connect("CrystalDex.db")
+
+def reset_db():
+    #This is for resetting the database. The method should not be accessed outside development.
+    conn = connect_to_db()#SQLite3 database connection object
+    cur = conn.cursor()#Cursor object
+    cur.executescript("""
+    BEGIN;
+    DROP TABLE IF EXISTS screen_conditions;
+    DROP TABLE IF EXISTS subwells;
+    COMMIT;
+    """)
+    conn.commit()
+
+    cur.executescript("""
+    BEGIN;
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE screen_conditions(
+                id INTEGER PRIMARY KEY,
+                screen_id INTEGER NOT NULL,
+                condition_number INTEGER NOT NULL,
+                condition TEXT NOT NULL);
+    CREATE TABLE crystal_trays(
+                id INTEGER PRIMARY KEY,
+                screen_id INTEGER NOT NULL,
+                date_set TEXT NOT NULL,
+                chaperone TEXT,
+                crystal_screen TEXT NOT NULL,
+                protein TEXT NOT NULL,
+                custom_tags TEXT,
+                top_left_protein_concentration REAL NOT NULL,
+                top_right_protein_concentration REAL NOT NULL,
+                bottom_left_protein_concentration REAL NOT NULL,
+                FOREIGN KEY (screen_id) REFERENCES screen_conditions(id)
+                ON DELETE CASCADE);
+    CREATE TABLE subwells(
+                id INTEGER PRIMARY KEY,
+                tray_id INTEGER NOT NULL,
+                row TEXT NOT NULL,
+                column INT NOT NULL,
+                subwell TEXT NOT NULL,
+                picture_link TEXT NOT NULL,
+                conditions TEXT NOT NULL,
+                minor_axis REAL NOT NULL,
+                major_axis REAL NOT NULL,
+                number_of_crystals INT NOT NULL,
+                shape TEXT NOT NULL,
+                possible_salt_crystals TEXT NOT NULL,
+                precipitation TEXT NOT NULL,
+                microcrystals TEXT NOT NULL,
+                glassy_protein_or_artifacts TEXT NOT NULL,
+                harvester TEXT,
+                vial_and_run TEXT,
+                date_snapped TEXT NOT NULL,
+                FOREIGN KEY (tray_id) REFERENCES crystal_trays(id));
+    COMMIT;
+    """)
+
+    conn.commit()
+    conn.close()
+
+reset_db()
+
+def get_trays(args_dict=None):
+    """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
+    conn = connect_to_db()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    if args_dict!=None:
+        clauses = []
+        values = []
+        for column, value in args_dict.items():
+            clauses.append(f"{column} = ?")
+            values.append(value)
+
+        query = f"SELECT * FROM crystal_trays"
+
+        query += " WHERE " + " AND ".join(clauses)
+
+        query += " ORDER BY id"
+
+        cur.execute(query, values)
+        rows = [dict(row) for row in cur.fetchall()]
+        conn.close()
+    else:
+        cur.execute("SELECT * FROM crystal_trays")
+        rows = cur.fetchall()
+        conn.close()
+
+    trays = [(", ".join(item for item in row)) for row in rows]
+    return trays
+
+def get_values(value=None):
+    """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
+    conn = connect_to_db()
+    cur = conn.cursor()
+    if value!=None:
+        query = f"SELECT DISTINCT {value} FROM crystal_trays"
+        cur.execute(query)
+        values = [row[0] for row in cur.fetchall()]
+        conn.close()
+    return values
+
+def update_excel():
+    conn = connect_to_db()
+
+    df = pd.read_sql_query("""
+                           SELECT id,
+                            date_set,
+                            chaperone,
+                            crystal_screen,
+                            protein,
+                            custom_tags,
+                            top_left_protein_concentration,
+                            top_right_protein_concentration,
+                            bottom_left_protein_concentration
+                            FROM crystal_trays
+                            ORDER BY date_set DESC""", conn)
+    conn.close()
+
+    with pd.ExcelWriter(local_library, engine="openpyxl") as writer:
+        for screen_name, group in df.groupby("name"):
+            sheet_name = screen_name[:31]  # Excel limit
+            group.drop(columns=["name"]).to_excel(
+                writer,
+                sheet_name=sheet_name,
+                index=False
+            )
+
+"""MICROSCOPE APP FUNCTIONS"""
 
 #In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
 def on_click(x,y,button,pressed):
     global mouse_is_down
     mouse_is_down = pressed
 
-listener = mouse.Listener(on_click=on_click)
-listener.start()
+#listener = mouse.Listener(on_click=on_click)
+#listener.start()
 
 def lock_mouse(duration=0.5):
     """Ensures that the mouse is far away from any important buttons when mouse clicks are simulated."""
@@ -93,330 +212,123 @@ def lock_mouse(duration=0.5):
             time.sleep(0.0001)  # super tight loop
     threading.Thread(target=lock, daemon=True).start()
 
+"""MAIN APPLICATION"""
+
 class CrystalDex_main:
+    """This is the main class of CrystalDex, containing all the variables that it must pass between different functions, particularly variables that are
+    obtained from the user in various tkinter frames or variables involved in window management for the GUI or for the microscope application."""
     def __init__(self):
-        self.box_uploading = False
-        self.server_uploading = True
-        self.chaperone_values = ["1TEL","2TEL","3TEL","4TEL","5TEL","6TEL"]
-        self.tray_names = {}
-        self.filtered_tray_names = {}
         self.crystal_size = [0,0]
-        self.harvesting = False
-        self.editing = False
-        self.pixel_to_size = 2000/867 #2 millimeter or 2000 microns per 867 pixels at 100% magnification (ie. a picture size of 1280x960pixels on the screen)
         self.picture_upload_filenames = {}
-        self.button_location = None
-        self.cell_fill_color = PatternFill(fill_type='solid',start_color='A9D18E',end_color='A9D18E')
-        self.not_first = ''
-        self.long_name = ''
-        self.two_code = ''
-        self.opened_microscope_app = False
 
         #Tkinter initializations
         root=tk.Tk()
         self.root = root
         self.root.title("CrystalDex")
+        icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
         icon = tk.PhotoImage(file=icon_path)
         self.root.iconphoto(True,icon)
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
         self.root.minsize(self.screen_width//5,600)
         self.root.geometry(f'1050x700+{self.screen_width//2-525}+{self.screen_height//2-350}')
+
         #Make the window resizable:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.root.protocol("WM_DELETE_WINDOW", self.close_SeBaView_and_root)
-        self.selected_condition = tk.StringVar(value='')
 
-        if self.box_uploading:
-            #Box integrations:
-            CLIENT_ID = "ywdxl21bfyxj6lpzest9alondci3jezf"
-            CLIENT_SECRET = "WV4AhaJ4P0b6UHy8ENaXTNby6mjyxJv5"
+        #Track which frame you're in:
+        self.current_frame = None
+        self.opened_microscope_app = False
 
-            def delete_token_files(base_name = 'box_token'):
-                for f in glob.glob(base_name+'*'):
-                    try:
-                        os.remove(f)
-                    except Exception as e:
-                        print(f'Failed to delete {f}: {e}')
-
-            def authorize():
-                token_storage = FileTokenStorage(filename='box_token')
-                config = OAuthConfig(
-                    client_id=CLIENT_ID,
-                    client_secret=CLIENT_SECRET,
-                    token_storage=token_storage
-                )
-                return BoxOAuth(config)
-
-            def get_code():
-                for proc in reversed(list(psutil.process_iter(['pid','name']))):
-                    if proc.info['name'] and 'msedge.exe'.lower() in proc.info['name'].lower():
-                        print(f'PID: {proc.info['pid']} - Title: {proc.info['name']}')#For some reason, deleting this line or commenting it out messes things up.
-                        try:
-                            browser = Application().connect(process=proc.info['pid'])
-                            browser.top_window().set_focus()
-                            start = time.time()
-                            while time.time() - start< 120:
-                                try:
-                                    pyautogui.hotkey('ctrl','l')
-                                    time.sleep(0.1)
-                                    pyautogui.hotkey('ctrl','c')
-                                    time.sleep(0.1)
-                                    url = pyperclip.paste()
-                                    if 'code=' in url and 'localhost' in url:
-                                        #print(f'url: {url}')
-                                        authorization_code = url.split('code=')[1]
-                                        return authorization_code
-                                except Exception as e:
-                                    print('Error while reading clipboard:', e)
-                                time.sleep(10)
-                            return True
-                        except Exception:
-                            pass
-                return False
-
-            auth = authorize()
-
-            def reset_box_auth():
-                print(f'Box token loading failed. Resetting token storage.')
-                delete_token_files()
-                auth = authorize()
-                auth_url = auth.get_authorize_url()
-                webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(auth_url)
-                authorization_code = get_code()
-                auth.get_tokens_authorization_code_grant(authorization_code)
-                self.client = BoxClient(auth=auth)
-
-            try:
-                auth.retrieve_token()
-                self.client = BoxClient(auth=auth)
-                #print(f'User already approved app for Box.')
-            except Exception as e:
-                reset_box_auth()
-
-            #Access CrystalDex_Library or the Mastercopy from Box:
-            file_download = None
-            try:
-                file_id = '1911115179608'
-                try:
-                    file_download = self.client.downloads.download_file(file_id).read()
-                except Exception:
-                    reset_box_auth()
-                    file_download = self.client.downloads.download_file(file_id).read()
-            except FileNotFoundError:
-                    file_id = '1911117908557'
-                    file_download = self.client.downloads.download_file(file_id).read()
-                
-            #Begin writing a new CrystalDex_Library.xlsx file on the working computer:
-            with open(CrystalDex_library,"wb") as c:
-                c.write(file_download)
-            self.wb = px.load_workbook(filename=os.path.abspath(CrystalDex_library))
-            
-            #Access Crystal_Sendoff_Sheet from Box:
-            file_download = None
-            try:
-                file_id = '1911117898957'
-                file_download = self.client.downloads.download_file(file_id).read()
-            except FileNotFoundError:
-                file_id = '1911115194008'
-                file_download = self.client.downloads.download_file(file_id).read()
-            with open(Crystal_Sendoff,'wb') as s:
-                s.write(file_download)
-            self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(Crystal_Sendoff))
-            self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
-
-            #Access Crystal_Screens.json from Box:
-            self.crystal_screens = {}
-            file_download = None
-            try:
-                file_id = 1911117169207
-                file_download = self.client.downloads.download_file(file_id).read()
-            except FileNotFoundError:
-                pass
-            self.crystal_screen_values = []
-            self.crystal_screen_symbols = {}
-            if os.path.exists(server_crystal_screens_path):
-                with open(server_crystal_screens_path, "r") as s:
-                    self.crystal_screens = json.load(s)
-                    for crystal_screen in self.crystal_screens.keys():
-                        self.crystal_screen_values.append(crystal_screen)
-                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-            else:
-                pass
-
-        elif self.server_uploading:
-            #Access CrystalDex_Library or the Mastercopy from the server:
-            self.wb = px.load_workbook(filename=os.path.abspath(server_CrystalDex_library))
-            #Access Crystal_Sendoff_Sheet from the server:
-            self.sendoff_workbook = px.load_workbook(filename=os.path.abspath(server_Crystal_Sendoff))
-            self.sendoff_sheet = self.sendoff_workbook['Crystal_Sendoff_Sheet']
-            self.vials_available = list(range(2,301))
-            for y in range(2,301):
-                cell_id = f'B{y}'
-                if self.sendoff_sheet[cell_id].value != None:
-                    self.vials_available.remove(y)
-            #Access Crystal_Screens.json from the server:
-            self.crystal_screen_values = []
-            self.crystal_screen_symbols = {}
-            if os.path.exists(server_crystal_screens_path):
-                with open(server_crystal_screens_path, "r") as s:
-                    self.crystal_screens = json.load(s)
-                    for crystal_screen in self.crystal_screens.keys():
-                        self.crystal_screen_values.append(crystal_screen)
-                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-
-    def reload_crystal_screens(self):
-        if os.path.exists(server_crystal_screens_path):
-            with open(server_crystal_screens_path, "r") as s:
-                self.crystal_screens = json.load(s)
-                self.crystal_screen_values = []
-                self.crystal_screen_symbols = {}
-                for crystal_screen in self.crystal_screens.keys():
-                    self.crystal_screen_values.append(crystal_screen)
-                    self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-
-    def refocus(self):
-        """Refocus the window if minimized"""
-        #Tkinter internal focusing:
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
-        #Global focusing via pywinauto:
-        self.root_window.restore()
-        pywinauto.keyboard.send_keys('%')
-        self.root_window.set_focus()
-        print(f'Refocused')
-
-    def Server_Save(self):
-        """This method allows users to upload both pictures and workbooks."""
-        if self.box_uploading:
-            box_pics = self.client.folders.get_folder_items('328850048557', fields='name').entries
-            box_pic_names = {box_pic.name for box_pic in box_pics}
-            for image_filename in os.listdir(crystal_pictures):
-                if image_filename in self.picture_upload_filenames.keys() and image_filename not in box_pic_names:
-                    file_path = os.path.join(crystal_pictures, image_filename)
-                    try:
-                        with open(file_path,'rb') as image_stream:
-                            uploading_file_return = self.client.uploads.upload_file(
-                                UploadFileAttributes(
-                                    name=image_filename,parent=UploadFileAttributesParentField(id='328850048557') #The id here is where the images will end up. It references a folder in Box.
-                                ),
-                                image_stream
-                            )
-                            uploading_file = uploading_file_return.entries[0]
-                            self.client.shared_links_files.add_share_link_to_file(file_id=uploading_file.id,fields='shared_link')
-                            shared_link_id = self.client.shared_links_files.get_shared_link_for_file(uploading_file.id,"shared_link").id
-                            shared_link_url = 'https://byu.app.box.com/file/'+str(shared_link_id)
-                            ws_title = f'{self.picture_upload_filenames.get(image_filename)[0]}'
-                            ws = self.wb[ws_title]
-                            cell_id = self.picture_upload_filenames.get(image_filename)[1]
-                            ws[cell_id].hyperlink = shared_link_url
-                            self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                            if 'harvested' in image_filename:
-                                for x in range(2,301):
-                                    cell_id = f'B{x}'
-                                    if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
-                                        self.sendoff_sheet[cell_id].hyperlink = shared_link_url
-                            self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                        os.remove(file_path)
-                        #Should self.picture_upload_filenames be reset at this point? If any of them gave an error, that would be bad (it would never upload). There doesn't seem to be an issue besides upload times being a little longer, so I'll leave it this way for now.
-                    except Exception as e:
-                        print(f'Error uploading {image_filename}: {e}')
-
-            #The following command uploads the Crystal Trays Library
-            self.client.uploads.upload_file_version(
-                attributes=box_sdk_gen.UploadFileAttributesParentField(
-                    name="CrystalDex_Library.xlsx",
-                    id="328850485682"),
-                    file_id="1911115179608",
-                    file=open(os.path.abspath(CrystalDex_library),"rb"
-                    )
-                )
-            
-            #The following command uploads the Crystal_Screens.json
-            self.client.uploads.upload_file_version(
-                attributes=box_sdk_gen.UploadFileAttributesParentField(
-                    name="Crystal_Screens.json",
-                    id="328850485682"),
-                    file_id="1911117169207",
-                    file=open(os.path.abspath(server_crystal_screens_path),"rb"
-                    )
-                )
-            
-            #The following command uploads the Crystal_Sendoff_Sheet.xlsx
-            if self.harvesting:
-                self.client.uploads.upload_file_version(
-                attributes=box_sdk_gen.UploadFileAttributesParentField(
-                    name="Crystal_Sendoff_Sheet.xlsx",
-                    id="328850485682"),
-                    file_id="1911117898957",
-                    file=open(os.path.abspath(Crystal_Sendoff),"rb"
-                    )
-                )
-        if self.server_uploading:
-            non_permissible = False
-            for image_filename in os.listdir(crystal_pictures):
-                #Locate the file in the working directory
-                file_path = os.path.join(crystal_pictures, image_filename)
-                if image_filename in self.picture_upload_filenames.keys():
-                    try:
-                        #Make the tray folder in the server directory and move the file there
-                        ws_title = f'{self.picture_upload_filenames[image_filename][0]}'
-                        ws = self.wb[ws_title]
-                        tray_name = str(ws['A1'].value)
-                        server_tray_path = os.path.join(server_crystal_pictures,tray_name)
-                        os.makedirs(server_tray_path,exist_ok=True)
-                        server_file_path = shutil.move(file_path, server_tray_path)
-                        #FUTURE UPDATE: If an image from the same subwell already exists, don't update the image link in the spreadsheet...
-                        #previous_images = os.listdir(server_tray_path)
-                        #Update the hyperlink in the CrystalDex Library
-                        cell_id = self.picture_upload_filenames[image_filename][1]
-                        if not self.box_uploading:#This is added because if the user is in fact uploading to box, the link that would be put in here would be useless to them.
-                            ws[cell_id].hyperlink = server_file_path
-                            self.wb.save(filename=os.path.abspath(CrystalDex_library))
-                            self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
-                            #Update the hyperlink in the Crystal Sendoff Sheet
-                            if 'harvested' in image_filename:
-                                for x in range(2,301):
-                                    cell_id = f'B{x}'
-                                    if self.sendoff_sheet[cell_id].value == os.path.splitext(image_filename)[0]:
-                                        self.sendoff_sheet[cell_id].hyperlink = server_file_path
-                            self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                            self.sendoff_workbook.save(filename=os.path.abspath(server_Crystal_Sendoff))
-                    except Exception as e:
-                        print(f'Error uploading {image_filename}: {e}')
-                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It will be placed in the Unlinked_Pictures path.')
-                        server_file_path = shutil.move(file_path, unlinked_pictures_path)
-                else:
-                    try:
-                        server_file_path = shutil.move(file_path, unlinked_pictures_path)
-                        messagebox.showerror(title='Uploading Error',message='A picture failed to upload correctly. It will be placed in the Unlinked_Pictures path.')
-                    except Exception as e:
-                        non_permissible = True
-            if non_permissible:
-                messagebox.showerror(title='Uploading Error',message='One or more pictures for which you do not have permissions is stuck inside the internal resources of CrystalDex. You will need an admin to delete it/them.')
-        
-        try:
-            if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
-                self.root.after(0,self.splash_win.destroy)
-            else:
-                self.startup()
-        except Exception:
-            pass
+        #Window management inits
+        self.root.update_idletasks()
+        self.root_winfo_id = self.root.winfo_id()
+        self.root_wrapper = Application(backend="win32").connect(handle=self.root_winfo_id)
+        self.root_window = self.root_wrapper.window(handle=self.root_winfo_id)
 
     def splash(self):
         self.splash_win = tk.Toplevel(self.root)
         self.splash_win.overrideredirect(True)
         self.splash_win.geometry(f'800x590+{self.screen_width//2-400}+{self.screen_height//2-510//2}')
+        splash_path = os.path.join(script_dir,'Resources','CrystalDex_splash.png')
         self.splash_image = tk.PhotoImage(file=splash_path)
-        ttk.Label(self.splash_win,text='Loading CrystalDex',image=self.splash_image).pack(expand=True)
+        ttk.Label(self.splash_win,text='Loading CrystalDex: DO NOT MOVE THE MOUSE!!!',image=self.splash_image).pack(expand=True)
         self.splash_win.attributes('-topmost',True)
+        self.splash_win.lift()
+        self.splash_win.focus_set()
+
+    def refocus(self):
+        """Refocus the root window if minimized. Whatever frame is currently active will still be visible."""
+        #Tkinter internal focusing:
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_set()
+        self.root.state("zoomed")
+        pywinauto.keyboard.send_keys('%')
+
+        try:
+            if hasattr(self.splash_win,"winfo_exists") and self.splash_win.winfo_exists():
+                self.root.after(0,self.splash_win.destroy)
+        except Exception:
+            pass
+
+    def add_menu(self):
+        menu = tk.Menu(self.root)
+        menu.add_command(label='Home',command=self.startup)
+        menu.add_command(label="Help",command=self.Help)
+        self.root.config(menu=menu)
+
+    def clear_widgets(self):
+        for widget in self.root.winfo_children():
+            if isinstance(widget,ttk.Frame):
+                widget.destroy()
+
+    def Help(self):
+        self.clear_widgets()
+        self.add_menu()
+        self.root.columnconfigure(0,weight=1)
+        self.root.rowconfigure(0,weight=1)
+        helpframe = ttk.Frame(self.root,padding='3 3 12 12')
+        helpframe.grid(column=0,row=0,sticky='N,W,E,S')
+        def go_to_docs():
+            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open("https://github.com/milesjb312/CrystalDex")
+        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
+        helptext = "This program functions by accessing a server or the cloud and syncing with an sqlite database that contain links to every picture you take." \
+        "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
+        "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
+        "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
+        "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
+        helptext_label = ttk.Label(helpframe,text=helptext)
+        helptext_label.grid(column=0,row=1,sticky='N,E,W')
+        helptext_label.bind("<Button-1>",go_to_docs())
+        self.root.after_idle(self.refocus)
+
+    def startup(self):
+        self.clear_widgets()
+        if not self.opened_microscope_app:
+            self.splash()
+            threading.Thread(target=self.load_SeBaView,daemon=True).start()
+        self.add_menu()
+        startup = ttk.Frame(self.root,padding='5 5 20 20')
+        self.current_frame = startup
+        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
+        startup.option_add('*tearOFF',tk.FALSE)
+        startup.grid(column=0,row=0,sticky='N,E,S,W')
+        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
+        #https://tkdocs.com/tutorial/text.html#basics
+        tk.Button(startup,text="Index Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Edit Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvest"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
+        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
 
     def load_SeBaView(self):
         """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
         software and simulate the correct tk.Button presses, but that is currently beyond the scope of this project."""
         exe_path = None
+        SeBaView_path = os.path.join(script_dir,'Resources','SeBaView_path_file.json')
         if os.path.exists(SeBaView_path):
             with open(SeBaView_path, "r") as s:
                 exe_path = json.load(s).get("SeBaView_path")
@@ -478,430 +390,149 @@ class CrystalDex_main:
             print(f'Failed to close SeBaView. Do it please!')
         self.root.destroy()
 
-    def restart(self):
-        self.Server_Save()
-        self.startup()
+    def add_tray(self,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
+        """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it routes into the characterize_subwells function."""
+        conn = connect_to_db()
+        conn.execute("""
+        INSERT INTO crystal_trays
+        (date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+        conn.commit()
+        conn.close()
 
-    def startup(self):
-        self.harvesting = False
-        self.editing = False
-        if not self.opened_microscope_app:
-            self.splash()
-            threading.Thread(target=self.load_SeBaView,daemon=True).start()
-        self.clear_widgets()
-        self.add_menu()
-        startup = ttk.Frame(self.root,padding='5 5 20 20')
-        self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
-        self.root_winfo_id = self.root.winfo_id()
-        self.root_wrapper = Application().connect(handle=self.root_winfo_id)
-        self.root_window = self.root_wrapper.window()
-        startup.option_add('*tearOFF',tk.FALSE)
-        startup.grid(column=0,row=0,sticky='N,E,S,W')
-        #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
-        #https://tkdocs.com/tutorial/text.html#basics
-        tk.Button(startup,text="Index Tray",command=self.New_Tray,width=40).grid(column=0,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Edit Tray',command=self.Edit_Tray,width=40).grid(column=1,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Harvest Crystals',command=self.Harvest_Crystals,width=40).grid(column=2,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='N,E,S,W')
-        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='N,E,S,W')
+    def Index_Tray(self,method):
+        """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
+        if method == "new":
+            self.clear_widgets()
+            self.add_menu()
+            new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
+            self.current_frame = new_tray_frame
+            new_tray_frame.grid(column=0,row=0,sticky='N,W')
 
-    def add_menu(self):
-        menu = tk.Menu(self.root)
-        menu.add_command(label='Home',command=self.restart)
-        menu.add_command(label="Help",command=self.Help)
-        self.root.config(menu=menu)
+            ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
 
-    def clear_widgets(self):
-        for widget in self.root.winfo_children():
-            if isinstance(widget,ttk.Frame):
-                widget.destroy()
-        self.restore_subwell_vars_button = None
+            date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))]
+            today_label = ttk.Label(new_tray_frame,text="Today?")
+            today_label.grid(column=3,row=5,sticky='N,W')
+            today_var = tk.BooleanVar()
+            today_checkbutton = ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False)
+            today_checkbutton.grid(column=4,row=5,sticky='N,W')
+            date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
+            date_set_label.grid(column=1,row=5,sticky='N,W')
+            date_set_var = tk.StringVar()
+            date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
+            date_set_drop_down.grid(column=2,row=5)
+            def set_today(*event):
+                date_set_var.set(str(datetime.now().strftime('%m-%d-%Y')))
+            today_checkbutton.bind('<ButtonPress>',set_today)
 
-    def Help(self):
-        self.clear_widgets()
-        self.add_menu()
-        self.root.columnconfigure(0,weight=1)
-        self.root.rowconfigure(0,weight=1)
-        helpframe = ttk.Frame(self.root,padding='3 3 12 12')
-        helpframe.grid(column=0,row=0,sticky='N,W,E,S')
-        def go_to_docs():
-            webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open("https://github.com/milesjb312/CrystalDex")
-        ttk.Label(helpframe,text="Welcome to CrystalDex, your helper for recording data from protein crystallization experiments!").grid(column=0,row=0,sticky='N,E,W')
-        self.helptext = "This program functions by accessing a server or the cloud and syncing with Excel sheets that contain links to every picture you take." \
-        "\nCrystalDex allows you to run the microscope application within its GUI and prompts you to measure and label each crystal."\
-        "\nIt then synchronizes all the crystallization screen data from its library of screens with each crystal picture taken."\
-        "\nThere are other subprograms in this app that allow you to upload new crystallization screens into its library (such as for optimization screens). "\
-        "\nFor more assistance, reach out to miles.j.bradford@outlook.com or take a look at the documentation at: https://github.com/milesjb312/CrystalDex"
-        helptext_label = ttk.Label(helpframe,text=self.helptext)
-        helptext_label.grid(column=0,row=1,sticky='N,E,W')
-        helptext_label.bind("<Button-1>",go_to_docs())
-        self.root.after_idle(self.refocus)
+            chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
+            chaperone_label.grid(column=1,row=6,sticky='N,W')
+            chaperone_var = tk.StringVar()
+            chaperone_values = get_values('chaperone')
+            chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=chaperone_var,values=chaperone_values)
+            chaperone_drop_down.grid(column=2,row=6)
 
-    def New_Tray(self):
-        self.clear_widgets()
-        self.add_menu()
-        self.reload_crystal_screens()
-        new_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        new_tray_frame.grid(column=0,row=0,sticky='N,W')
-        self.root.columnconfigure(0,weight=1)
-        self.root.rowconfigure(0,weight=1)
+            crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
+            crystal_screen_label.grid(column=1,row=7,sticky='N,W')
+            crystal_screen_var = tk.StringVar()
+            crystal_screen_values = get_trays()
+            crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=crystal_screen_values,state="readonly")
+            crystal_screen_drop_down.grid(column=2,row=7)
 
-        ttk.Label(new_tray_frame, text="Select from standard tags or type a new entry:").grid(column=1,row=1)
+            protein_values = get_values('protein')#Queries the database to find all past proteins used in any crystal tray
+            protein_label = ttk.Label(new_tray_frame,text="Target protein: For Moody Lab users, put FULL construct name!!! (do not use special characters /.:;'*?\")")
+            protein_label.grid(column=1,row=8,sticky='N,W')
+            protein_var = tk.StringVar()
+            protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=protein_var,values=protein_values)
+            protein_drop_down.grid(column=2,row=8,sticky='N,W')
 
-        date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))]
-        today_label = ttk.Label(new_tray_frame,text="Today?")
-        today_label.grid(column=3,row=5,sticky='N,W')
-        today_var = tk.BooleanVar()
-        today_checkbutton = ttk.Checkbutton(new_tray_frame,variable=today_var,onvalue=True,offvalue=False)
-        today_checkbutton.grid(column=4,row=5,sticky='N,W')
-        date_set_label = ttk.Label(new_tray_frame,text="Date Set (required; 00-00-0000):")
-        date_set_label.grid(column=1,row=5,sticky='N,W')
-        date_set_var = tk.StringVar()
-        date_set_drop_down = ttk.Combobox(new_tray_frame,textvariable=date_set_var,values=date_set_values)
-        date_set_drop_down.grid(column=2,row=5)
-        def set_today(*event):
-            date_set_var.set(str(datetime.now().strftime('%m-%d-%Y')))
-        today_checkbutton.bind('<ButtonPress>',set_today)
+            protein_concentration_values = get_values('top_left_protein_concentration')
+            protein_concentration_values.extend(get_values('top_right_protein_concentration'))
+            protein_concentration_values.extend(get_values('bottom_left_protein_concentration'))
+            protein_top_left_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
+            protein_top_left_concentration_label.grid(column=1,row=9,sticky='N,W')
+            protein_top_left_concentration_var = tk.StringVar()
+            protein_top_left_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=protein_top_left_concentration_var,values=protein_concentration_values)
+            protein_top_left_concentration_drop_down.grid(column=2,row=9,sticky='N,W')
 
-        chaperone_label = ttk.Label(new_tray_frame,text="Crystal Chaperone (optional):")
-        chaperone_label.grid(column=1,row=6,sticky='N,W')
-        chaperone_var = tk.StringVar()
-        chaperone_drop_down = ttk.Combobox(new_tray_frame,textvariable=chaperone_var,values=self.chaperone_values)
-        chaperone_drop_down.grid(column=2,row=6)
+            protein_top_right_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top right subwell (required):")
+            protein_top_right_concentration_label.grid(column=1,row=10,sticky='N,W')
+            protein_top_right_concentration_var = tk.StringVar()
+            protein_top_right_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=protein_top_right_concentration_var,values=protein_concentration_values)
+            protein_top_right_concentration_drop_down.grid(column=2,row=10,sticky='N,W')
 
-        crystal_screen_label = ttk.Label(new_tray_frame,text="Crystal Screen (required):")
-        crystal_screen_label.grid(column=1,row=7,sticky='N,W')
-        crystal_screen_var = tk.StringVar()
-        crystal_screen_drop_down = ttk.Combobox(new_tray_frame,textvariable=crystal_screen_var,values=self.crystal_screen_values,state="readonly")
-        crystal_screen_drop_down.grid(column=2,row=7)
+            protein_bottom_left_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into bottom left subwell (required):")
+            protein_bottom_left_concentration_label.grid(column=1,row=11,sticky='N,W')
+            protein_bottom_left_concentration_var = tk.StringVar()
+            protein_bottom_left_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=protein_bottom_left_concentration_var,values=protein_concentration_values)
+            protein_bottom_left_concentration_drop_down.grid(column=2,row=11,sticky='N,W')
 
-        target_protein_values = ["DARPin","CMG2","UBA","TELSAM","sfGFP"]
-        target_protein_label = ttk.Label(new_tray_frame,text="Target protein: For Moody Lab users, put FULL construct name!!! (do not use special characters /.:;'*?\")")
-        target_protein_label.grid(column=1,row=8,sticky='N,W')
-        target_protein_var = tk.StringVar()
-        target_protein_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_var,values=target_protein_values)
-        target_protein_drop_down.grid(column=2,row=8,sticky='N,W')
+            custom_tags_values = []
+            custom_tags_label = ttk.Label(new_tray_frame,text="Custom Tags (optional; separated by commas, please!):")
+            custom_tags_label.grid(column=1,row=12,sticky='N,W')
+            custom_tags_var = tk.StringVar()
+            custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
+            custom_tags_drop_down.grid(column=2,row=12)
 
-        target_protein_stock_concentration_values = ['1','5','15','20']
+            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(date_set_var.get(),
+                                                                                   chaperone_var.get(),
+                                                                                   crystal_screen_var.get(),
+                                                                                   protein_var.get(),
+                                                                                   custom_tags_var.get(),
+                                                                                   top_left=protein_top_left_concentration_var.get(),
+                                                                                   top_right=protein_top_right_concentration_var.get(),
+                                                                                   bottom_left=protein_bottom_left_concentration_var.get()
+                                                                                   )).grid(column=1,row=13,sticky='W')
 
-        target_protein_top_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top left subwell (required):")
-        target_protein_top_left_stock_concentration_label.grid(column=1,row=9,sticky='N,W')
-        target_protein_top_left_stock_concentration_var = tk.StringVar()
-        target_protein_top_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_left_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_top_left_stock_concentration_drop_down.grid(column=2,row=9,sticky='N,W')
+            for child in new_tray_frame.winfo_children():
+                child.grid_configure(padx=5,pady=5)
+            self.root.after_idle(self.refocus)
 
-        target_protein_top_right_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into top right subwell (required):")
-        target_protein_top_right_stock_concentration_label.grid(column=1,row=10,sticky='N,W')
-        target_protein_top_right_stock_concentration_var = tk.StringVar()
-        target_protein_top_right_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_top_right_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_top_right_stock_concentration_drop_down.grid(column=2,row=10,sticky='N,W')
+        elif method=="old" or method=="harvest":
+            """This will let the user edit old trays by changing their subwell data."""
+            self.clear_widgets()
+            self.add_menu()
+            st_frame = ttk.Frame(self.root,padding="3 3 12 12")
+            st_frame.grid(column=0,row=0,sticky='N,W')
+            def filter_trays(date=None,screen=None,protein=None):
+                """This function will query the database for trays"""
+                filter_button = tk.Button(st_frame,text="Filter",command=lambda:filter_trays())
+                filter_button.grid(column=0,row=3)
 
-        target_protein_bottom_left_stock_concentration_label = ttk.Label(new_tray_frame,text="Target protein stock concentration placed into bottom left subwell (required):")
-        target_protein_bottom_left_stock_concentration_label.grid(column=1,row=11,sticky='N,W')
-        target_protein_bottom_left_stock_concentration_var = tk.StringVar()
-        target_protein_bottom_left_stock_concentration_drop_down = ttk.Combobox(new_tray_frame,textvariable=target_protein_bottom_left_stock_concentration_var,values=target_protein_stock_concentration_values)
-        target_protein_bottom_left_stock_concentration_drop_down.grid(column=2,row=11,sticky='N,W')
+                st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
+                st_name_label.grid(column=0,row=4)
+                tray_name = tk.StringVar()
+                tray_names = {}
+                st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(tray_names.keys()),state="readonly")
+                st_name_combobox.grid(column=0,row=5)
 
-        #Later, if I have time, I'll want to add a little virtual replica in column 3 of a single well (with the four subwells) so that the user can see exactly what they're filling out, and each subwell will have the concentration appear as they fill it in.
+                #If the user is certain that none of the trays that show up are theirs:
+                none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
+                none_of_the_above_label.grid(column=0,row=6)
+            #tk.Button(st_frame,text="make new tray",command=lambda: add_tray()).grid(column=1,row=6,sticky='W')
 
-        custom_tags_values = []
-        custom_tags_label = ttk.Label(new_tray_frame,text="Custom Tags (optional; separated by commas, please!):")
-        custom_tags_label.grid(column=1,row=12,sticky='N,W')
-        custom_tags_var = tk.StringVar()
-        custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
-        custom_tags_drop_down.grid(column=2,row=12)
-
-        tk.Button(new_tray_frame,text="Begin Indexing Tray",
-                   command=lambda: self.Set_Tray_Vars(date_set_var.get(),
-                                                      today_var.get(),
-                                                      crystal_screen_var.get(),
-                                                      target_protein_var.get(),
-                                                      target_protein_top_left_stock_concentration_var.get(),
-                                                      target_protein_top_right_stock_concentration_var.get(),
-                                                      target_protein_bottom_left_stock_concentration_var.get(),
-                                                      chaperone_var.get(),
-                                                      custom_tags_var.get(),
-                                                      None)
-                                                      ).grid(column=1,row=13,sticky='N,W')
-
-        for child in new_tray_frame.winfo_children():
-            child.grid_configure(padx=5,pady=5)
-        self.root.after_idle(self.refocus)
-
-    def Select_Tray(self,short_title):
-        self.reset_subwell_vars()
-        self.clear_widgets()
-        self.add_menu()
-        st_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        st_frame.grid(column=0,row=0,sticky='N,W')
-        self.root.columnconfigure(0,weight=1)
-        self.root.rowconfigure(0,weight=1)
-        def filter_trays(date=None,screen=None,target_protein=None):
-            self.filtered_tray_names.clear()
-            if date!=None and date!="":
-                for ws in self.wb:
-                    if date in ws.title:
-                        self.filtered_tray_names[str(ws['A1'].value)] = ws.title
-            if screen!=None and screen!="":
-                screen = screen[-2::]
-                if date!=None and date!="":
-                    for ws in self.wb:
-                        if screen not in ws.title:
-                            self.filtered_tray_names.pop(str(ws['A1'].value),None)
-                else:
-                    for ws in self.wb:
-                        if screen in ws:
-                            self.filtered_tray_names[str(ws['A1'].value)] = ws.title
-            if target_protein!=None and target_protein!="":
-                if date!=None and date!="" or screen!=None and screen!="":
-                    for ws in self.wb:
-                        if target_protein not in str(ws['D4'].value):
-                            self.filtered_tray_names.pop(str(ws['A1'].value),None)
-                else:
-                    for ws in self.wb:
-                        if target_protein in str(ws['D4'].value):
-                            self.filtered_tray_names[str(ws['A1'].value)] = ws.title
-            elif (date==None or date=="") and (screen==None or screen=="") and (target_protein==None or target_protein==""):
-                self.filtered_tray_names = self.tray_names
-            st_name_combobox.configure(values=list(self.filtered_tray_names.keys()))
-
-        if not self.editing and not self.harvesting:
-            st_name_label = ttk.Label(st_frame,text=(
-                'At least one previously indexed tray was found that shares a date, screen, and target protein with the current tray.'
-                '\nPlease review the following to ensure no duplicate trays are indexed!'
-            ))
-            st_name_label.grid(column=0,row=0)
-        else:
-            date_filter_label = tk.Label(st_frame,text="Filter by date set:")
-            date_filter_label.grid(column=0,row=0)
-            date_filter = tk.StringVar()
-            #(datetime.now().strftime('%m-%d-%Y'))
-            date_entry = tk.Entry(st_frame, textvariable=date_filter)
-            date_entry.grid(column=1,row=0)
-
-            screen_filter_label = tk.Label(st_frame,text="Filter by crystal screen:")
-            screen_filter_label.grid(column=0,row=1)
-            screen_filter = tk.StringVar()
-            crystal_screen_drop_down = ttk.Combobox(st_frame,textvariable=screen_filter,values=self.crystal_screen_values,state="readonly")
-            crystal_screen_drop_down.grid(column=1,row=1)
-
-            target_protein_filter_label = tk.Label(st_frame,text="Filter by target protein:")
-            target_protein_filter_label.grid(column=0,row=2)
-            target_protein_filter = tk.StringVar()
-            target_protein_entry = tk.Entry(st_frame,textvariable=target_protein_filter)
-            target_protein_entry.grid(column=1,row=2)
-
-        filter_button = tk.Button(st_frame,text="Filter",command=lambda:filter_trays(date_filter.get(),screen_filter.get(),target_protein_filter.get()))
-        filter_button.grid(column=0,row=3)
-
-        st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
-        st_name_label.grid(column=0,row=4)
-        tray_name = tk.StringVar()
-        st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(self.tray_names.keys()),state="readonly")
-        st_name_combobox.grid(column=0,row=5)
-
-        #If the user is certain that none of the trays that show up are theirs:
-        if not self.harvesting and not self.editing:
-            none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
-            none_of_the_above_label.grid(column=0,row=6)
-            tk.Button(st_frame,text="make new tray",command=lambda: make_new_tray(short_title)).grid(column=1,row=6,sticky='W')
-        
-        def make_new_tray(short_title):
-            shorter_title = short_title
-            suffix = 1
-            all_titles = [ws.title for ws in self.wb]
-
-            # Make sure the title is unique
-            while shorter_title in all_titles:
-                shorter_title = f"{short_title[:24]}_{suffix}"
-                suffix += 1
-            
-            new_worksheet = self.wb.copy_worksheet(self.wb["Mastercopy"])
-            new_worksheet.title = shorter_title
-            self.Set_Tray_Vars(self.tray_vars['date_set'],
-                               self.tray_vars['today'],
-                               self.tray_vars['crystal_screen'],
-                               self.tray_vars['target_protein'],
-                               self.tray_vars['target_protein_top_left_stock_concentration'],
-                               self.tray_vars['target_protein_top_right_stock_concentration'],
-                               self.tray_vars['target_protein_bottom_left_stock_concentration'],
-                               self.tray_vars['chaperone'],
-                               self.tray_vars['custom_tags'])
-
-        if self.harvesting:
-            tk.Button(st_frame,text="Save selection and proceed",
-            command=lambda: self.Set_Tray_Vars(self.wb[self.tray_names[tray_name.get()]]['D1'].value,
-                                               False,
-                                               self.wb[self.tray_names[tray_name.get()]]['D3'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D4'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H1'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H2'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H3'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D2'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D5'].value,
-                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=7)
-        else:
-            tk.Button(st_frame,text="Save selection and proceed",
-            command=lambda: self.Set_Tray_Vars(self.wb[self.tray_names[tray_name.get()]]['D1'].value,
-                                               False,
-                                               self.wb[self.tray_names[tray_name.get()]]['D3'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D4'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H1'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H2'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['H3'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D2'].value,
-                                               self.wb[self.tray_names[tray_name.get()]]['D5'].value,
-                                               self.wb[self.tray_names[tray_name.get()]])).grid(column=0,row=7)
-
-        self.root.after_idle(self.refocus)
-    
-    def Set_Tray_Vars(self,
-                      date_set,
-                      today,
-                      crystal_screen,
-                      target_protein,
-                      target_protein_top_left_stock_concentration,
-                      target_protein_top_right_stock_concentration,
-                      target_protein_bottom_left_stock_concentration,
-                      chaperone,
-                      custom_tags,
-                      tray=None
-                      ):
-        if today:
-            date_set = (datetime.now().strftime('%m-%d-%Y'))
-        else:
-            try:
-                date_set = str(datetime.strftime(datetime.strptime(date_set,"%m-%d-%Y"),"%m-%d-%Y"))
-            except ValueError:
-                messagebox.showerror(title="Date Error",message="You attempted to put in an invalid date. Please use the style: 01-01-2025")
-        
-        self.tray_vars = {
-            'date_set':date_set,'today':today,'crystal_screen':crystal_screen,'target_protein':target_protein,
-            'target_protein_top_left_stock_concentration':target_protein_top_left_stock_concentration,
-            'target_protein_top_right_stock_concentration':target_protein_top_right_stock_concentration,
-            'target_protein_bottom_left_stock_concentration':target_protein_bottom_left_stock_concentration,
-            'chaperone':chaperone,
-            'custom_tags':custom_tags
-        }
-
-        tray = tray
-        if tray==None:
-            indexable = True
-            if self.tray_vars['crystal_screen'] not in self.crystal_screens.keys():
-                messagebox.showerror(title="Crystal Screen Does Not Exist",message="The crystal screen you attempted to reference does not exist.")
-                indexable = False
-            if self.tray_vars['target_protein'] == None:
-                messagebox.showerror(title="No Protein Target",message="You neglected to enter a protein target. (CrystalDex can't index nothingness!)")
-                indexable = False
-            if self.tray_vars['custom_tags'] is not None:
-                custom_tags_list = [tag.strip() for tag in self.tray_vars['custom_tags'].split(', ')]
-            if indexable:
-                ws_possible_duplicate_count = 0
-                for ws in self.wb:
-                    tags_cell = str(ws['K1'].value or "")
-                    tags = [tag.strip() for tag in tags_cell.split(', ')]
-                    if all(term in tags for term in [self.tray_vars['date_set'],self.tray_vars['crystal_screen'],self.tray_vars['target_protein'],self.tray_vars['target_protein_top_left_stock_concentration'],self.tray_vars['target_protein_top_right_stock_concentration'],self.tray_vars['target_protein_bottom_left_stock_concentration'],self.tray_vars['chaperone']]):
-                        self.tray_names[str(ws['A1'].value)] = ws.title
-                        ws_possible_duplicate_count += 1
-                if ws_possible_duplicate_count >0:
-                    full_title = f'{self.tray_vars['date_set']}_{self.crystal_screen_symbols.get(self.tray_vars['crystal_screen'])}_{self.tray_vars['target_protein']}_1'
-                    short_title = full_title[:26]
-                    self.Select_Tray(short_title)
-                elif ws_possible_duplicate_count == 0:
-                    print(f"No trays found with these stats; generating new tray!")#change this to a Tkinter messagebox or the splash screen
-                    tray = self.wb.copy_worksheet(self.wb["Mastercopy"])
-                    full_title = f'{self.tray_vars['date_set']}_{self.crystal_screen_symbols.get(self.tray_vars['crystal_screen'])}_{self.tray_vars['target_protein']}_1'
-                    short_title = full_title[:26]
-                    try:
-                        tray.title = short_title
-                        tray['A1'] = full_title
-                        self.Index_Tray(tray)
-                    except ValueError:
-                        messagebox.showerror(title='Bad Title',message="You tried to use a special character in one of your tray descriptors. Try again with none of the following: ()/.:;'*?\"")
-        else:
-            self.Index_Tray(tray)
-
-    def Index_Tray(self,tray):
-        self.clear_widgets()
-        self.SeBaView_wrapper.maximize()
-        self.SeBaView_wrapper.set_focus()
-        all_tags = [self.tray_vars['date_set'],self.tray_vars['crystal_screen'],self.tray_vars['target_protein'],self.tray_vars['target_protein_top_left_stock_concentration'],self.tray_vars['target_protein_top_right_stock_concentration'],self.tray_vars['target_protein_bottom_left_stock_concentration'],self.tray_vars['chaperone'],self.tray_vars['custom_tags']]
-        tray['K1'] = ', '.join(map(str,all_tags))
-        tray['D1'] = self.tray_vars['date_set']
-        tray['D2'] = self.tray_vars['chaperone']
-        tray['D3'] = self.tray_vars['crystal_screen']
-        tray['D4'] = self.tray_vars['target_protein']
-        tray['D5'] = self.tray_vars['custom_tags']
-        tray['H1'] = self.tray_vars['target_protein_top_left_stock_concentration']
-        tray['H2'] = self.tray_vars['target_protein_top_right_stock_concentration']
-        tray['H3'] = self.tray_vars['target_protein_bottom_left_stock_concentration']
-        self.wb.save(filename=os.path.abspath(CrystalDex_library))
-        self.reset_subwell_vars()
-        self.identify_subwell(tray)
-        self.root.after_idle(self.refocus)
-
-    def reset_subwell_vars(self):
-        now = datetime.now()        
-        if hasattr(self,'subwell_vars'):
-            if hasattr(self, 'restore_subwell_vars_button') and self.restore_subwell_vars_button!=None:
-                try:
-                    self.restore_subwell_vars_button.config(state='normal')
-                except tk.TclError:
-                    pass
-            self.last_subwell_vars = {
-                'well_row':self.subwell_vars['well_row'].get(),
-                'well_column':self.subwell_vars['well_column'].get(),
-                'subwell':self.subwell_vars['subwell'].get(),
-                'crystal_width':self.subwell_vars['crystal_width'].get(),
-                'crystal_height':self.subwell_vars['crystal_height'].get(),
-                'number_of_crystals':self.subwell_vars['number_of_crystals'].get(),
-                'shape':self.subwell_vars['shape'].get(),
-                'possible_salt_crystals':self.subwell_vars['possible_salt_crystals'].get(),
-                'precipitation':self.subwell_vars['precipitation'].get(),
-                'microcrystals':self.subwell_vars['microcrystals'].get(),
-                'glassy_protein_or_artifacts':self.subwell_vars['glassy_protein_or_artifacts'].get(),
-                'harvester':self.subwell_vars['harvester'].get(),
-                'vial':self.subwell_vars['vial'].get()
-            }
-
-            self.subwell_vars['well_row'].set('')
-            self.subwell_vars['well_column'].set('')
-            self.subwell_vars['subwell'].set('')
-            self.subwell_vars['crystal_width'].set('')
-            self.subwell_vars['crystal_height'].set('')
-            self.subwell_vars['number_of_crystals'].set('')
-            self.subwell_vars['shape'].set('')
-            self.subwell_vars['possible_salt_crystals'].set(False)
-            self.subwell_vars['precipitation'].set(False)
-            self.subwell_vars['microcrystals'].set(False)
-            self.subwell_vars['glassy_protein_or_artifacts'].set(False)
-            self.subwell_vars['harvester'].set('')
-            self.subwell_vars['vial'].set('')
-
-        else:
-            self.subwell_vars = {'well_row':tk.StringVar(),'well_column':tk.StringVar(),'subwell':tk.StringVar(),'crystal_width':tk.StringVar(),
-                             'crystal_height':tk.StringVar(),'number_of_crystals':tk.StringVar(),'shape':tk.StringVar(),'possible_salt_crystals':tk.BooleanVar(),
-                             'precipitation':tk.BooleanVar(), 'microcrystals':tk.BooleanVar(),'glassy_protein_or_artifacts':tk.BooleanVar(),'now':now,
-                             'date_snapped':now.strftime('%m-%d-%Y-%H-%M-%S'),'harvester':tk.StringVar(),'vial':tk.StringVar()
-            }
-
-    def restore_subwell_vars(self):
-        self.subwell_vars['well_row'].set(self.last_subwell_vars['well_row'])
-        self.subwell_vars['well_column'].set(self.last_subwell_vars['well_column'])
-        self.subwell_vars['subwell'].set(self.last_subwell_vars['subwell'])
-        self.subwell_vars['crystal_width'].set(self.last_subwell_vars['crystal_width'])
-        self.subwell_vars['crystal_height'].set(self.last_subwell_vars['crystal_height'])
-        self.crystal_size = [self.subwell_vars['crystal_width'].get(),self.subwell_vars['crystal_height'].get()]
-        self.subwell_vars['number_of_crystals'].set(self.last_subwell_vars['number_of_crystals'])
-        self.subwell_vars['shape'].set(self.last_subwell_vars['shape'])
-        self.subwell_vars['possible_salt_crystals'].set(self.last_subwell_vars['possible_salt_crystals'])
-        self.subwell_vars['precipitation'].set(self.last_subwell_vars['precipitation'])
-        self.subwell_vars['microcrystals'].set(self.last_subwell_vars['microcrystals'])
-        self.subwell_vars['glassy_protein_or_artifacts'].set(self.last_subwell_vars['glassy_protein_or_artifacts'])
-        self.subwell_vars['harvester'].set(self.last_subwell_vars['harvester'])
-        #self.subwell_vars['vial'].set(self.last_subwell_vars['vial']) this one causes issues
-
-    def identify_subwell(self,ws):
+    def characterize_subwell(self,tray,method):
+        """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
+        CREATE TABLE subwells(
+            row TEXT NOT NULL,
+            column INT NOT NULL,
+            subwell TEXT NOT NULL,
+            picture_link TEXT NOT NULL,
+            conditions TEXT NOT NULL,
+            minor_axis REAL NOT NULL,
+            major_axis REAL NOT NULL,
+            number_of_crystals INT NOT NULL,
+            shape TEXT NOT NULL,
+            possible_salt_crystals TEXT NOT NULL,
+            precipitation TEXT NOT NULL,
+            microcrystals TEXT NOT NULL,
+            glassy_protein_or_artifacts TEXT NOT NULL,
+            harvester TEXT,
+            vial_and_run TEXT,
+            date_snapped TEXT NOT NULL)
+        """
         self.clear_widgets()
         self.add_menu()
 
@@ -914,12 +545,6 @@ class CrystalDex_main:
 
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
-
-        if hasattr(self,'restore_subwell_vars_button') and self.restore_subwell_vars_button!=None:
-            self.restore_subwell_vars_button.destroy()
-        self.restore_subwell_vars_button = tk.Button(subwell_frame,text='Restore last subwell variables',
-                    command=self.restore_subwell_vars,state='disabled')
-        self.restore_subwell_vars_button.grid(column=2,row=1)
 
         well_row_label = ttk.Label(subwell_frame,text="Well row:")
         well_row_label.grid(column=1,row=2)
@@ -980,7 +605,7 @@ class CrystalDex_main:
         ttk.Checkbutton(subwell_frame,variable=self.subwell_vars['glassy_protein_or_artifacts'],onvalue=True,offvalue=False).grid(column=2,row=12)
 
         x = 0
-        if self.harvesting:
+        if method=="harvesting":
             x = 2
             harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
             harvester_label.grid(column=1,row=13)
@@ -1004,23 +629,8 @@ class CrystalDex_main:
         tk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
 
-        if self.harvesting:
-            self.harvest_crystal_button = tk.Button(subwell_frame,text='Harvest crystal',
-                    command=lambda: self.take_picture(
-                        ws,
-                        notes.get(1.0,tk.END),
-                        harvester=self.subwell_vars['harvester'].get()
-                    ),state="disabled")
-            self.harvest_crystal_button.grid(column=1,row=16+x)
-        else:
-            tk.Button(subwell_frame,text='Take and save picture',
-                    command=lambda: self.take_picture(
-                        ws,
-                        notes.get(1.0,tk.END)
-                    )).grid(column=1,row=16+x)
-
         tk.Button(subwell_frame,text="Done with this tray",
-                   command=lambda: self.Server_Save()).grid(column=1,row=17+x)
+                   command=lambda: self.startup()).grid(column=1,row=17+x)
         
         for child in subwell_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
@@ -1037,169 +647,50 @@ class CrystalDex_main:
         time.sleep(0.1)
         print(f'monitor mouse is done.')
 
-    """
-    def fix_file(self,filename):
-        messaged = False
-        for indexed_tray in self.wb:
-            if indexed_tray.title.lower() in filename.lower():
-                messaged = True
-                messagebox.showerror(title="Lost Picture",message=f'A picture named {filename}, presumably from the tray {indexed_tray.title}, has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray (both within Box), or delete the picture from this computer and re-index the corresponding well.')
-        if not messaged:
-            messagebox.showerror(title='Lost Picture',message=f'A picture named {filename} has failed to migrate to the upload folder. Please manually add it to the Crystal_Pictures folder and to the appropriate virtual tray or delete the picture from this computer and re-index the corresponding well.')
-    """
-
-    def take_picture(
-            self,
-            ws,
-            notes,
-            harvester=None):
+    def take_picture(self, notes, method, harvester):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
-        self.subwell_vars['now'] = datetime.now()
-        self.subwell_vars['date_snapped'] = self.subwell_vars['now'].strftime('%m-%d-%Y-%H-%M-%S')
 
-        image_title = f'{self.tray_vars['chaperone']}_{self.tray_vars['target_protein']}_{self.tray_vars['crystal_screen']}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{self.tray_vars['date_set']}_{self.subwell_vars['date_snapped']}'
-        if self.harvesting:
+        #image_title = f'{self.tray_vars['chaperone']}_{self.tray_vars['protein']}_{self.tray_vars['crystal_screen']}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{self.tray_vars['date_set']}_{self.subwell_vars['date_snapped']}'
+        if method=="harvesting":
             image_title = image_title+'_harvested'
-
-        row = well_to_excel_dict.get(self.subwell_vars['well_row'].get())
-        column = well_to_excel_dict.get(self.subwell_vars['well_column'].get())
-        picture_link_cell = ws[f'{column}{row}']
-        if self.subwell_vars['subwell'].get()=='top_right':
-            picture_link_cell = picture_link_cell.offset(row=0,column=2)
-            column = px.utils.get_column_letter(px.utils.column_index_from_string(column)+2)
-        elif self.subwell_vars['subwell'].get()=='bottom_left':
-            picture_link_cell = picture_link_cell.offset(row=7,column=0)
-            row = row+7
         
-        def take_take_picture():
-            self.SeBaView_wrapper.maximize()
-            self.SeBaView_wrapper.set_focus()
-            lock_mouse(duration=0.5)
-            time.sleep(0.1)
-            self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
-            time.sleep(1)
-            lock_mouse(duration=0.5)
-            time.sleep(0.1)
-            self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
-            pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
-            crystals_found = str(ws['K2'].value)
-            if crystals_found != "None":
-                crystals_found = crystals_found + f", {self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}{self.subwell_vars['subwell'].get()}"
-            else:
-                crystals_found = f"{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}{self.subwell_vars['subwell'].get()}"
-            ws['K2'].value = crystals_found
-            picture_link_cell.value = image_title
-            if picture_link_cell.offset(row=1,column=0).value == "" or picture_link_cell.offset(row=1,column=0).value == None:
-                picture_link_cell.offset(row=1,column=0).value = f'{(datetime.strptime(self.subwell_vars['date_snapped'],'%m-%d-%Y-%H-%M-%S')-datetime.strptime(self.tray_vars['date_set'],"%m-%d-%Y")).days}' #might have to change the type of these variables
-            picture_link_cell.offset(row=2,column=0).value = f'{self.crystal_size[0]}x{self.crystal_size[1]} um'
-            picture_link_cell.offset(row=3,column=0).value = f'{self.subwell_vars['number_of_crystals'].get()}'
-            picture_link_cell.offset(row=4,column=0).value = f'{self.subwell_vars['shape'].get()}'
-            picture_link_cell.offset(row=5,column=0).value = f'Possible salt crystals: {self.subwell_vars['possible_salt_crystals'].get()}, precipitation: {self.subwell_vars['precipitation'].get()}, microcrystals: {self.subwell_vars['microcrystals'].get()}, glassy protein or artifacts: {self.subwell_vars['glassy_protein_or_artifacts'].get()}'
-            picture_link_cell.offset(row=6,column=0).value = notes
+        self.SeBaView_wrapper.maximize()
+        self.SeBaView_wrapper.set_focus()
+        lock_mouse(duration=0.5)
+        time.sleep(0.1)
+        self.SeBaView_wrapper.click_input(coords=(55, 70))  #This accesses the save as tk.Button.
+        time.sleep(1)
+        lock_mouse(duration=0.5)
+        time.sleep(0.1)
+        self.SeBaView_wrapper.click_input(coords=(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
+        pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
 
-            for x in range(7):
-                picture_link_cell.offset(row=x,column=-1).fill = self.cell_fill_color
-                picture_link_cell.offset(row=x,column=0).fill = self.cell_fill_color
+        if self.server_uploading:
+            try:
+                self.wb.save(filename=os.path.abspath(CrystalDex_Library))
+            except Exception as e:
+                print(f'{e}')
 
-            if self.server_uploading:
-                try:
-                    self.wb.save(filename=os.path.abspath(server_CrystalDex_library))
-                except Exception as e:
-                    print(f'{e}')
-                    messagebox.showerror(title='CrystalDex Library In Use',message="You or someone on the server currently has the CrystalDex Library open. CrystalDex cannot write to an open file. Please ask them to close the file or wait until later." \
-                    "\nOne good way to handle this is for the person who is not currently taking pictures to make a temporary copy of the CrystalDex Library for review purposes only.")
+        self.wb.save(filename=os.path.abspath(CrystalDex_Library))
 
-            self.wb.save(filename=os.path.abspath(CrystalDex_library))
-
-        if self.harvesting:
+        if method=="harvesting":
             if self.crystal_size[1] != 0:
-                #The following updates the Crystal_Sendoff_Sheet and does so every time a harvested picture is taken. This is not uploaded to the Server until the Server_Save function is run when you're done with the whole tray.
-                cell_id = f'B{str(self.subwell_vars['vial'].get())}'
-                crystal_cell = self.sendoff_sheet[cell_id]
-                if crystal_cell.offset(row=0,column=1).value == "" or crystal_cell.offset(row=0,column=1).value==None:
-                    crystal_cell.value = image_title
-                    condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
-                    crystal_cell.offset(row=0,column=1).value = condition
-                    crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                    crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                    crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                    crystal_cell.offset(row=0,column=5).value = harvester
-                    crystal_cell.offset(row=0,column=6).value = f'{self.tray_vars['date_set']}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                    crystal_cell.offset(row=0,column=7).value = notes
-                    self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                else:
-                    #Strictly speaking, it should be impossible for the user to find this. I'm not sure though. And it only halfway works. So hopefully they don't!
-                    self.harvest_error = tk.Toplevel(self.root)
-                    icon = tk.PhotoImage(file=icon_path)
-                    self.harvest_error.iconphoto(True,icon)
-                    self.harvest_error.title("Harvesting Error")
-                    self.harvest_error.geometry(f'{200}x{200}+{int(self.screen_width/2-100)}+{int(self.screen_height/2-100)}')
-
-                    vial_full_label = ttk.Label(self.harvest_error,text="That vial appears to be full. Rewrite anyway or select a different vial.")
-                    vial_full_label.grid(column=0,row=0)
-                    vial_overwrite_button = tk.Button(self.harvest_error,text="Rewrite",command=lambda:vial_overwrite)
-                    vial_overwrite_button.grid(column=0,row=1)
-
-                    new_vial = tk.StringVar()
-                    different_vial_dropdown = ttk.Combobox(self.harvest_error,textvariable=new_vial,values=self.vials_available,state='readonly')
-                    different_vial_dropdown.grid(column=0,row=2)
-                    select_different_vial_button = tk.Button(self.harvest_error,text="Choose different vial",command=lambda:switch_vial())
-                    select_different_vial_button.grid(column=1,row=2)
-                    
-                    def vial_overwrite():
-                        crystal_cell.value = image_title
-                        condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]
-                        crystal_cell.offset(row=0,column=1).value = condition
-                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                        crystal_cell.offset(row=0,column=5).value = harvester
-                        crystal_cell.offset(row=0,column=6).value = f'{self.tray_vars['date_set']}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                        crystal_cell.offset(row=0,column=7).value = notes
-                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                        self.harvest_error.destroy()
-
-                    def switch_vial():
-                        cell_id = f'B{str(new_vial.get())}'
-                        crystal_cell = self.sendoff_sheet[cell_id]
-                        crystal_cell.value = image_title
-                        condition = self.crystal_screens.get(self.tray_vars['crystal_screen'])[subwell_to_condition_dict[f'{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}']]        
-                        crystal_cell.offset(row=0,column=1).value = condition
-                        crystal_cell.offset(row=0,column=2).value = f'{self.subwell_vars['shape'].get()}'
-                        crystal_cell.offset(row=0,column=3).value = min(self.crystal_size[0],self.crystal_size[1]) #Minor axis
-                        crystal_cell.offset(row=0,column=4).value = max(self.crystal_size[0],self.crystal_size[1]) #Major axis
-                        crystal_cell.offset(row=0,column=5).value = harvester
-                        crystal_cell.offset(row=0,column=6).value = f'{self.tray_vars['date_set']}, {self.subwell_vars['date_snapped']}' #date_set and date_harvested are passed from identify_subwell 
-                        crystal_cell.offset(row=0,column=7).value = notes
-                        self.sendoff_workbook.save(filename=os.path.abspath(Crystal_Sendoff))
-                        self.harvest_error.destroy()
-                self.vials_available = list(range(2,301))
-                for y in range(2,301):
-                    cell_id = f'B{y}'
-                    if self.sendoff_sheet[cell_id].value != None:
-                        self.vials_available.remove(y)
-                self.vial_dropdown.config(values=self.vials_available)
-                self.harvest_crystal_button.config(state='disabled')
+                pass
             else:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
         if hasattr(self,'measure_tool_window') and self.measure_tool_window.winfo_exists():
             self.measure_tool_window.destroy()
-
-        take_take_picture()
         
         for filename in os.listdir(desktop):
             file_path = os.path.join(desktop, filename)
             if os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')) and time.time() - os.path.getmtime(file_path)<100:
                 try:
                     shutil.move(file_path, crystal_pictures)
-                    self.picture_upload_filenames[filename] = [ws.title,f'{column}{row}']
                 except Exception as e:
                     messagebox.showerror(title="Failed to Upload a File",message=f"CrystalDex couldn't move the file: {filename} into its internal resources because of the error: {e}")
             elif os.path.isfile(file_path) and filename.lower().endswith(('.jpeg','.jpg','.bmp','.tif')):
                 #self.fix_file(filename)
                 pass
-
-        self.reset_subwell_vars()
         self.root.after_idle(self.refocus)
 
     def measure_crystal(self,function_to_run):
@@ -1211,6 +702,7 @@ class CrystalDex_main:
             self.measure_tool_window = tk.Toplevel(self.root)
         else:
             self.measure_tool_window = tk.Toplevel(self.root)
+        icon_path = os.path.join(script_dir,'Resources',"crystaldex_icon.png")
         icon = tk.PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
@@ -1226,7 +718,7 @@ class CrystalDex_main:
         self.line_end = None
         self.measure_tool_window.deiconify()
         self.measure_tool_window.lift()
-        self.measure_tool_window.focus_force() #so that when users click and drag, they don't have to click twice on the screen first.
+        self.measure_tool_window.focus_set() #so that when users click and drag, they don't have to click twice on the screen first.
 
         def poll_mouse():
             nonlocal measure_tool
@@ -1243,14 +735,14 @@ class CrystalDex_main:
                     self.crystal_size[0] = int((((self.line_end[0] - self.line_start[0]) ** 2 +(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
-                    self.measure_tool_window.focus_force()
+                    self.measure_tool_window.focus_set()
                 elif self.crystal_size[0] != 0 and self.crystal_size[1] == 0:
                     self.crystal_size[1] = int((((self.line_end[0] - self.line_start[0]) ** 2+(self.line_end[1] - self.line_start[1]) ** 2) ** 0.5)*self.pixel_to_size)
                     if hasattr(self,"harvest_crystal_button"):
                         self.harvest_crystal_button.configure(state="normal")
                     self.measure_tool_window.deiconify()
                     self.measure_tool_window.lift()
-                    self.measure_tool_window.focus_force()
+                    self.measure_tool_window.focus_set()
             if self.crystal_size[1] == 0:
                 self.measure_tool_window.after(50,poll_mouse)
             else:
@@ -1258,41 +750,20 @@ class CrystalDex_main:
                     function_to_run()
         poll_mouse()
 
-    def Edit_Tray(self):
-        """This is the root method that allows you to index a tray that has already been started."""
-        self.editing = True
-        self.reset_subwell_vars()
-        x = 0
-        for ws in self.wb:
-            x += 1
-            self.tray_names[str(ws['A1'].value)] = ws.title
-        if x>1:
-            self.Select_Tray(None)
-        else:
-            messagebox.showerror(title='No crystal trays indexed yet...',message=f"There are no trays in your CrystalDex Library. You can't index what doesn't exist!")
-            self.startup()
-
-    def Harvest_Crystals(self):
-        """This is the root method that allows you to use the Select_Tray method in the harvesting mode, which forces you to include some types of data, but which also
-        creates a crystal sendoff sheet that is useful for tracking what conditions and stats each crystal had.
-        """
-        self.harvesting = True
-        self.reset_subwell_vars()
-        x = 0
-        for ws in self.wb:
-            x += 1
-            self.tray_names[str(ws['A1'].value)] = ws.title
-        if x>1:
-            self.Select_Tray(None)
-        else:
-            messagebox.showerror(title='No crystal trays indexed yet...',message=f"There are no trays in your CrystalDex Library. You can't harvest what doesn't exist!")
-            self.startup()
+    def add_crystal_screen(self,name):
+        """This creates a new crystal screen in the database and returns the screen_id. It is usually called by the Upload_Crystal_Screen function and routes back
+        into the same function to provide a location for the individual well conditions to be provided."""
+        conn = connect_to_db()
+        cur = conn.cursor()
+        cur.execute("""
+INSERT INTO crystal_screens (name) VALUES (?)""",(name,))
+        screen_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return screen_id
 
     def Upload_Crystal_Screen(self):
-        """This method allows users to upload a crystal screen directly from Hampton's data sheets. It doesn't always work, but it does luckily have a method for overwriting
-        the results before you save the crystal screen. NOTE: There is currently no way for users to delete crystal screens. I may need to add this later.
-        """
-        self.reload_crystal_screens()
+        """This method allows users to upload a crystal screen directly from Hampton's data sheets."""
         self.clear_widgets()
         self.add_menu()
         self.root.geometry(f'1250x700+{self.screen_width//2-625}+{self.screen_height//2-350}')
@@ -1311,55 +782,44 @@ class CrystalDex_main:
         crystal_screen_symbol_entry = ttk.Entry(upload_crystal_screen_frame,textvariable=crystal_screen_symbol)
         crystal_screen_symbol_entry.grid(row=0,column=3)
 
-        upload_crystal_screen_button = tk.Button(upload_crystal_screen_frame,text=f"Upload {self.not_first}crystal screen",command=lambda: scrape_crystal_screen_data())
+        upload_crystal_screen_button = tk.Button(upload_crystal_screen_frame,text=f"Upload crystal screen",command=lambda: scrape_crystal_screen_data())
         upload_crystal_screen_button.grid(column=4,row=0,sticky='N,W')
-        upload_crystal_screen_button.configure(text=f'Upload {self.not_first}crystal screen')
-
-        conditions = ['' for _ in range(96)]
+        upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
         def scrape_crystal_screen_data():
+            conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
-                    title="Select the pdf containing the crystal screen conditions",
-                    filetypes=[('PDF files',"*.pdf")]
+                    title="Select the excel workbook containing the crystal screen formulation from Hampton. If the workbook contains several pages, you must consolidate them to one page with all the conditions. Delete all rows without a reagent #. Then, delete all extra worksheets."
                 )
-            text = ""
-            with pdfplumber.open(crystal_screen_path) as pdf:
-                for page in pdf.pages:
-                    text += page.extract_text() + "\n"
-
-                if not any(keyword in text for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                    print(f"No text found. If you're trying to use Make Tray from Hampton, use the Optimization tk.Button on the home screen instead.")
-
-            last_condition = 0
-            offset = 0
-            for condition in range(96):
-                if conditions[condition].strip():
-                    last_condition = condition
-                    offset = 1
-
-            for condition in range(96):
-                next_condition = str(condition+2)
-                reading = False
-                for line in text.splitlines():
-                    if line.startswith(f'{condition+1}.'):
-                        line = line.strip()
-                        if (any(keyword in line.lower() for keyword in ['%','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium'])) or all(keyword in line.lower() for keyword in ['ph',' m ']):
-                            try:
-                                conditions[condition+last_condition+offset] = line
-                                reading = True
-                            except IndexError:
-                                messagebox.showerror(title='Too many conditions',message=f'There were too many conditions to add to the new screen. Please review the upload.')
-                                break
-                                #Note that this is a very rough fix to the problem.
-                    elif reading and not line.startswith(f'{next_condition}.'):
-                            if any(keyword in line.lower() for keyword in ['ide','ate','magnesium','calcium','chloride','cobalt','nickel','polyethylene','glycol','monomethyl','ether','tris','none','potassium','sodium','tartrate','tetrahydrate','trihydrate','hydrochloride','hexahydrate','dihydrate','ammonium']):
-                                conditions[condition+last_condition+offset] += ' ' + line
-                    elif reading and line.startswith(f'{next_condition}.'):
-                        reading = False
+            
+            cswb = openpyxl.open(crystal_screen_path,read_only=True)
+            sheet_names = cswb.sheetnames
+            formulation_sheet = cswb[sheet_names[0]]
+            print(f'formulation_sheet.title: {formulation_sheet.title}')
+            for row in range(6,110):
+                cellA = f'A{row}'
+                if formulation_sheet[cellA].value not in [None,0]:
+                    condition = ""
+                    for c in range(1,19):
+                        column=get_column_letter(c)
+                        refcell = f'{column}4'
+                        ref1 = formulation_sheet[refcell].value
+                        refcell2 = f'{column}5'
+                        ref2 = formulation_sheet[refcell2].value
+                        refcell3 = f'{column}{row}'
+                        ref3 = formulation_sheet[refcell3].value
+                        if ref1!=None and ref2!=None and ref3!=None:
+                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
+                        elif ref1!=None and ref2==None and ref3!=None:
+                            condition = condition+str(ref1)+":"+str(ref3)+", "
+                        elif ref3!=None:
+                            condition = condition+str(ref1)+str(ref2)+":"+str(ref3)+", "
+                    condition_number = row-6
+                    conditions[condition_number] = condition
 
             listbox_label = ttk.Label(upload_crystal_screen_frame,text='Review and correct generated conditions:')
             listbox_label.grid(row=2,column=0)
-            listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
+            listbox_values = [f"{condition}" for condition in conditions]
             condition_var = tk.StringVar(value=listbox_values)
             conditions_listbox = tk.Listbox(upload_crystal_screen_frame,listvariable=condition_var,height=25,width=150)
             conditions_listbox.grid(row=3,column=0,columnspan=3)
@@ -1395,14 +855,20 @@ class CrystalDex_main:
                         edited_condition.set(f'{conditions[0]}')
                     
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
-            
+            print(str(crystal_screen_name.get()))
             def save_screens():
-                self.crystal_screens[f'{crystal_screen_name.get()}__{crystal_screen_symbol.get()}'] = conditions
-                with open(server_crystal_screens_path, "w") as c:
-                    json.dump(self.crystal_screens, c)
-                self.Server_Save()
-                self.close_SeBaView_and_root()#For some reason, the json won't upload until after the tkinter root is closed.
-            
+                screen_id = self.add_crystal_screen(str(crystal_screen_name.get()))#this both creates the crystal_screen and provides the id
+                conn = connect_to_db()
+                cur = conn.cursor()
+                for i, condition in enumerate(conditions,start=1):
+                    cur.execute(
+                        "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                        (screen_id, i, condition)
+                    )
+                conn.commit()
+                conn.close()
+                self.startup()
+                
             tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save_screens).grid(row=5,column=2)
 
     def Optimization_Screen(self):
@@ -1415,7 +881,6 @@ class CrystalDex_main:
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky='N,W,E,S')
 
-        self.reload_crystal_screens()
         self.crystal_screen = None
         conditions = ['' for _ in range(96)]
         selected_index = tk.IntVar(value=-1)
@@ -1460,7 +925,7 @@ class CrystalDex_main:
             if not make_tray_copy:
                 def choose_ref():
                     for crystal_screen in self.crystal_screens.keys():
-                        self.crystal_screen_values.append(crystal_screen)
+                        crystal_screen_values = get_trays()
                         self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
                         crystal_screens_label = ttk.Label(optimization_screen_frame,text='Available screens:')
                         crystal_screens_label.grid(row=1,column=0)
@@ -1622,7 +1087,7 @@ class CrystalDex_main:
                     
                     tk.Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
 
-                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=51,column=0)
+                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=self.startup).grid(row=51,column=0)
 
             elif make_tray_copy:
                 w = 8
@@ -1900,16 +1365,17 @@ class CrystalDex_main:
                             
                     tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
 
-                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save).grid(row=5,column=3)
+                    def save_screens():
+                        screen_id = self.add_crystal_screen(long_name.get())#this both creates the crystal_screen and provides the id
+                        conn = connect_to_db()
+                        cur = conn.cursor()
+                        for i, condition in enumerate(conditions,start=1):
+                            cur.execute(
+                                "INSERT INTO screen_conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                                (screen_id, i, condition)
+                            )
+                        conn.commit()
+                        conn.close()
+                        self.startup()
 
-        def save():
-            self.crystal_screens[f'{self.long_name}__{self.two_code}'] = conditions
-            #print(f'crystal_screens: {self.crystal_screens}')
-            with open(server_crystal_screens_path, "w") as c:
-                json.dump(self.crystal_screens, c)
-            self.splash()
-            if self.box_uploading:
-                threading.Thread(target=self.Box_Save,daemon=True).start()
-            if self.server_uploading:
-                threading.Thread(target=self.Server_Save,daemon=True).start()
-            self.startup()
+                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save_screens).grid(row=5,column=3)
