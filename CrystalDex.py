@@ -309,6 +309,10 @@ class CrystalDex_main:
         except Exception:
             pass
 
+    def enforce_position(self):
+        self.root.geometry("+0+0")
+        self.root.after(100, self.enforce_position)
+
     def add_menu(self):
         menu = tk.Menu(self.root)
         menu.add_command(label='Home',command=self.startup)
@@ -456,10 +460,10 @@ class CrystalDex_main:
         (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
-        tray_id = cur.lastrowid
+        self.tray_id = str(cur.lastrowid).strip()
         conn.commit()
         conn.close()
-        self.characterize_subwell(tray_id,method="new")
+        self.characterize_subwell(method="new")
 
     def Index_Tray(self,method):
         """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
@@ -537,15 +541,21 @@ class CrystalDex_main:
             custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
             custom_tags_drop_down.grid(column=2,row=12)
 
+            def verify_conc(conc_var):
+                if conc_var.get() == "":
+                    return 0
+                else:
+                    return float(conc_var.get())
+
             tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(crystal_screen_dict[crystal_screen_var.get()],
                                                                                     date_set_var.get(),
                                                                                    chaperone_var.get(),
                                                                                    crystal_screen_var.get(),
                                                                                    protein_var.get(),
                                                                                    custom_tags_var.get(),
-                                                                                   top_left=float(protein_top_left_concentration_var.get()),
-                                                                                   top_right=float(protein_top_right_concentration_var.get()),
-                                                                                   bottom_left=float(protein_bottom_left_concentration_var.get())
+                                                                                   top_left=verify_conc(protein_top_left_concentration_var),
+                                                                                   top_right=verify_conc(protein_top_right_concentration_var),
+                                                                                   bottom_left=verify_conc(protein_bottom_left_concentration_var)
                                                                                    )).grid(column=1,row=13,sticky='W')
 
             for child in new_tray_frame.winfo_children():
@@ -575,7 +585,7 @@ class CrystalDex_main:
                 none_of_the_above_label.grid(column=0,row=6)
             #tk.Button(st_frame,text="make new tray",command=lambda: add_tray()).grid(column=1,row=6,sticky='W')
 
-    def characterize_subwell(self,tray_id,method):
+    def characterize_subwell(self,method):
         """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
         CREATE TABLE subwells(
                 id INTEGER PRIMARY KEY,
@@ -599,6 +609,8 @@ class CrystalDex_main:
                 notes TEXT,
                 FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
                 ON DELETE CASCADE);"""
+        self.SeBaView_wrapper.maximize()
+        self.SeBaView_wrapper.set_focus()
         self.clear_widgets()
         self.add_menu()
 
@@ -610,6 +622,7 @@ class CrystalDex_main:
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.root.after_idle(self.refocus)
+        self.enforce_position()
 
         ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
@@ -713,29 +726,31 @@ class CrystalDex_main:
         notes = tk.Text(subwell_frame, width = 50, height = 5)
         notes.grid(column=1,row=14+x,columnspan=2)
 
-        def get_crystal_screen(tray_id):
-            #crystal_screen_dict = get_crystal_screens()
+        def get_crystal_screen():
             conn = connect_to_db()
             cur = conn.cursor()
-            cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(tray_id))
-            crystal_screen_id = cur.fetchall()
+            cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(self.tray_id,))
+            crystal_screen_id = cur.fetchone()
             conn.close()
-            print(f'str(crystal_screen_id): {str(crystal_screen_id)}')
-            return int(crystal_screen_id)
+            if crystal_screen_id is None:
+                return None
+            return crystal_screen_id[0]
 
         def get_condition_number(well_row,well_column):
-            condition_number = (well_column-1)*8+column_index_from_string(well_row)
-            return condition_number
+            return (well_column-1)*8+column_index_from_string(well_row)
 
         def get_condition():
-            print(f'tray_id: {tray_id}')
+            print(f'tray_id: {self.tray_id}')
             conn = connect_to_db()
             cur = conn.cursor()
-            cur.execute("""SELECT condition FROM conditions WHERE crystal_screen_id = ? AND condition_number = ?""", (get_crystal_screen(tray_id),get_condition_number(well_row,well_column)))
-            condition_args = cur.fetchall()
+            crystal_screen = get_crystal_screen()
+            condition_number = get_condition_number(well_row.get(),int(well_column.get()))
+            cur.execute("""SELECT condition FROM conditions WHERE crystal_screen_id = ? AND condition_number = ?""",(crystal_screen,condition_number))
+            condition_args = cur.fetchone()
             conn.close()
-            condition = " ".join(condition_args)
-            return condition
+            if condition_args is None:
+                return ""
+            return condition_args[0]
 
         def update_crystal_size_vars():
             crystal_width.set(f'{self.crystal_size[0]}')
@@ -756,12 +771,18 @@ class CrystalDex_main:
         def get_date_snapped():
             date_snapped = str(datetime.now().strftime('%m-%d-%Y'))
             return date_snapped
+        
+        def get_harvester():
+            if method=="harvesting":
+                return harvester.get()
+            else:
+                return "None"                
 
         tk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
         
         tk.Button(subwell_frame,text = 'Take picture and proceed to next well',
-                  command = lambda: self.take_picture(tray_id,well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),harvester.get(),get_vial_and_run(),get_date_snapped(),notes.get(),method)).grid(column=1,row=16+x)
+                  command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),get_vial_and_run(),get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
 
         tk.Button(subwell_frame,text="Done with this tray",
                    command=lambda: self.startup()).grid(column=1,row=17+x)
@@ -769,22 +790,32 @@ class CrystalDex_main:
         for child in subwell_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
 
-    def take_picture(self,tray_id,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes, method):
+    def take_picture(self,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes, method):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         #image_title = f'{self.tray_vars['chaperone']}_{self.tray_vars['protein']}_{self.tray_vars['crystal_screen']}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{self.tray_vars['date_set']}_{self.subwell_vars['date_snapped']}'
-        image_title = f'{tray_id}_{row}{column}{subwell}'
+        image_title = f'{self.tray_id}_{row}{column}_{subwell}'
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
         safe_click(self.SeBaView_wrapper,(55,70))
         safe_click(self.SeBaView_wrapper,(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
+        time.sleep(1)
+        desktop_files = [f for f in os.listdir(desktop) if os.path.isfile(os.path.join(desktop, f))]
+        prev_len_desktop_files = len(desktop_files)
         pywinauto.keyboard.send_keys(f"{image_title}{{ENTER}}") #Enter the image_title name into the save window
+        unsaved = True
+        while unsaved:
+            desktop_files = [f for f in os.listdir(desktop) if os.path.isfile(os.path.join(desktop, f))]
+            len_desktop_files = len(desktop_files)
+            if prev_len_desktop_files != len_desktop_files:
+                unsaved=False
+                time.sleep(0.1)
 
         if method=="harvesting":
             if self.crystal_size[1] == 0:
                 messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
         
-        suffixes = ['.jpeg','.jpg','.bmp','.tif']
-        file_path_possibilities = [os.path.join(desktop,image_title,suffix) for suffix in suffixes]
+        suffixes = ['.jpeg','.jpg','.bmp','.tif','']
+        file_path_possibilities = [os.path.join(desktop,image_title+suffix) for suffix in suffixes]
         moved = False
         for file_path in file_path_possibilities:
             if os.path.exists(file_path):
@@ -828,7 +859,7 @@ class CrystalDex_main:
         cur = conn.cursor()
         cur.execute("""INSERT INTO subwells (tray_id, row, column, subwell, picture_path, conditions, minor_axis, major_axis, number_of_crystals, shape,
                     possible_salt_crystals, precipitation, microcrystals, glassy_protein_or_artifacts, harvester, vial_and_run, date_snapped, notes) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (tray_id,row,column,subwell,picture_path,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes))
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (self.tray_id,row,column,subwell,picture_path,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes))
         conn.commit()
         conn.close()        
 
@@ -844,7 +875,7 @@ class CrystalDex_main:
         icon = tk.PhotoImage(file=icon_path)
         self.measure_tool_window.iconphoto(True,icon)
         self.measure_tool_window.title("Crystal Measuring Tool")
-        self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width // 4-10}+{0}')
+        self.measure_tool_window.geometry(f'{self.SeBaView_wrapper_rect.width()-self.screen_width//4-10}x{self.SeBaView_wrapper_rect.height()}+{self.screen_width//4-10}+{0}')
         self.measure_tool_window.resizable(False,False)            
         measure_tool = tk.Canvas(self.measure_tool_window,width=self.measure_tool_window.winfo_width(),height=self.measure_tool_window.winfo_height(),bg='white')
         measure_tool.pack(fill='both',expand=True)
