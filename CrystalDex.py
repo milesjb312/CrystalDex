@@ -179,7 +179,7 @@ def get_trays(args_dict=None):
         rows = cur.fetchall()
         conn.close()
 
-    trays = [(", ".join(item for item in row)) for row in rows]
+    trays = [(", ".join(str(item) for item in row)) for row in rows]
     return trays
 
 def get_values(value=None):
@@ -358,8 +358,8 @@ class CrystalDex_main:
         startup.grid(column=0,row=0,sticky='nesw')
         #To make the buttons bigger and prettier, you'll have to use another widget, probably a text widget with a tk.Button placed inside it.
         #https://tkdocs.com/tutorial/text.html#basics
-        tk.Button(startup,text="Index Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='nesw')
-        tk.Button(startup,text='Edit Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='nesw')
+        tk.Button(startup,text="Index New Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='nesw')
+        tk.Button(startup,text='Update Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvest"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='nesw')
@@ -563,27 +563,99 @@ class CrystalDex_main:
             self.root.after_idle(self.refocus)
 
         elif method=="old" or method=="harvest":
-            """This will let the user edit old trays by changing their subwell data."""
+            """This will let the user edit old trays by changing their subwell data.
+            For reference, this is how the crystal_trays table is made:
+            CREATE TABLE crystal_trays(
+                    id INTEGER PRIMARY KEY,
+                    crystal_screen_id INTEGER NOT NULL,
+                    date_set TEXT NOT NULL,
+                    chaperone TEXT,
+                    crystal_screen TEXT NOT NULL,
+                    protein TEXT NOT NULL,
+                    custom_tags TEXT,
+                    top_left_protein_concentration REAL NOT NULL,
+                    top_right_protein_concentration REAL NOT NULL,
+                    bottom_left_protein_concentration REAL NOT NULL);
+            """
             self.clear_widgets()
             self.add_menu()
-            st_frame = ttk.Frame(self.root,padding="3 3 12 12")
-            st_frame.grid(column=0,row=0,sticky='nw')
-            def filter_trays(date=None,screen=None,protein=None):
-                """This function will query the database for trays"""
-                filter_button = tk.Button(st_frame,text="Filter",command=lambda:filter_trays())
-                filter_button.grid(column=0,row=3)
+            old_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
+            old_tray_frame.grid(column=0,row=0,sticky='nw')
+            old_tray_frame.columnconfigure(0,minsize=450)
+            filter_button = tk.Button(old_tray_frame,text="Filter",command=lambda:reget_trays()).grid(column=0,row=3,sticky='W')
 
-                st_name_label = ttk.Label(st_frame,text=('Please select a tray to edit.'))
+            date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))]
+            today_label = ttk.Label(old_tray_frame,text="Today?")
+            today_label.grid(column=3,row=5,sticky='nw')
+            today_var = tk.BooleanVar()
+            today_checkbutton = ttk.Checkbutton(old_tray_frame,variable=today_var,onvalue=True,offvalue=False)
+            today_checkbutton.grid(column=4,row=5,sticky='nw')
+            date_set_label = ttk.Label(old_tray_frame,text="Date Set (required; 00-00-0000):")
+            date_set_label.grid(column=1,row=5,sticky='nw')
+            date_set_var = tk.StringVar()
+            date_set_drop_down = ttk.Combobox(old_tray_frame,textvariable=date_set_var,values=date_set_values)
+            date_set_drop_down.grid(column=2,row=5)
+            def set_today(*event):
+                date_set_var.set(str(datetime.now().strftime('%m-%d-%Y')))
+            today_checkbutton.bind('<ButtonPress>',set_today)
+
+            chaperone_label = ttk.Label(old_tray_frame,text="Crystal Chaperone (optional):")
+            chaperone_label.grid(column=1,row=6,sticky='nw')
+            chaperone_var = tk.StringVar()
+            chaperone_values = get_values('chaperone')
+            chaperone_drop_down = ttk.Combobox(old_tray_frame,textvariable=chaperone_var,values=chaperone_values)
+            chaperone_drop_down.grid(column=2,row=6)
+
+            crystal_screen_label = ttk.Label(old_tray_frame,text="Crystal Screen (required):")
+            crystal_screen_label.grid(column=1,row=7,sticky='nw')
+            crystal_screen_var = tk.StringVar()
+            crystal_screen_dict = get_crystal_screens()
+            crystal_screen_values = list(crystal_screen_dict.keys())
+            crystal_screen_drop_down = ttk.Combobox(old_tray_frame,textvariable=crystal_screen_var,values=crystal_screen_values,state="readonly")
+            crystal_screen_drop_down.grid(column=2,row=7)
+
+            protein_values = get_values('protein')#Queries the database to find all past proteins used in any crystal tray
+            protein_label = ttk.Label(old_tray_frame,text="Target protein: For Moody Lab users, put FULL construct name!!! (do not use special characters /.:;'*?\")")
+            protein_label.grid(column=1,row=8,sticky='nw')
+            protein_var = tk.StringVar()
+            protein_drop_down = ttk.Combobox(old_tray_frame,textvariable=protein_var,values=protein_values)
+            protein_drop_down.grid(column=2,row=8,sticky='nw')
+
+            st_name_label = ttk.Label(old_tray_frame,text=('Please select a tray to edit.'))
+            st_name_label.grid(column=0,row=4)
+            tray_var = tk.StringVar()
+            trays = get_trays()
+            st_name_combobox = ttk.Combobox(old_tray_frame,textvariable=tray_var,values=trays,state="readonly")
+            st_name_combobox.grid(column=0,row=5,sticky='ew')
+
+            tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
+
+            def select_old_tray(tray_var):
+                self.tray_id = tray_var.split(", ")[0]
+                self.characterize_subwell("old")
+
+            def reget_trays():
+                st_name_label = ttk.Label(old_tray_frame,text=('Please select a tray to edit.'))
                 st_name_label.grid(column=0,row=4)
-                tray_name = tk.StringVar()
-                tray_names = {}
-                st_name_combobox = ttk.Combobox(st_frame,textvariable=tray_name,values=list(tray_names.keys()),state="readonly")
-                st_name_combobox.grid(column=0,row=5)
+                tray_var = tk.StringVar()
+                filter = {}
+                if date_set_var.get()!="":
+                    filter["date_set"]=date_set_var.get()
+                if chaperone_var.get()!="":
+                    filter["chaperone"]=chaperone_var.get()
+                if crystal_screen_var.get()!="":
+                    filter["crystal_screen"]=crystal_screen_var.get()
+                if protein_var.get()!="":
+                    filter["protein"]=protein_var.get()
+                trays = get_trays(filter)
+                st_name_combobox = ttk.Combobox(old_tray_frame,textvariable=tray_var,values=trays,state="readonly")
+                st_name_combobox.grid(column=0,row=5,sticky='ew')
 
-                #If the user is certain that none of the trays that show up are theirs:
-                none_of_the_above_label = ttk.Label(st_frame,text="If none of the above match your tray, click 'make new tray':")
-                none_of_the_above_label.grid(column=0,row=6)
-            #tk.Button(st_frame,text="make new tray",command=lambda: add_tray()).grid(column=1,row=6,sticky='W')
+            #If the user is certain that none of the trays that show up are theirs:
+            none_of_the_above_label = ttk.Label(old_tray_frame,text="If none of the above match your tray, click 'make new tray':")
+            none_of_the_above_label.grid(column=3,row=6)
+            tk.Button(old_tray_frame,text="make new tray",command=lambda: self.Index_Tray("new")).grid(column=3,row=7,sticky='W')
+
 
     def characterize_subwell(self,method):
         """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
@@ -765,7 +837,7 @@ class CrystalDex_main:
             return major_axis
         
         def get_vial_and_run():
-            vial_and_run = None
+            vial_and_run = vial.get()
             return vial_and_run
         
         def get_date_snapped():
@@ -945,7 +1017,7 @@ class CrystalDex_main:
         upload_crystal_screen_button.grid(column=4,row=0,sticky='nw')
         upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
-        def scrape_crystal_screen_data():
+        def scrape_crystal_screen_data(self):
             conn = connect_to_db()
             cur = conn.cursor()
             cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
