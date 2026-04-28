@@ -1,5 +1,4 @@
 # -*- mode: python ; coding: utf-8 -*-
-
 from PyInstaller.utils.hooks import collect_all
 
 datas,binaries,hiddenimports = collect_all('openpyxl')
@@ -11,12 +10,17 @@ a = Analysis(
     datas=datas+[('README.md','.'),
     ('Resources/Crystal_Pictures','Crystal_Pictures'),
     ('Resources/Crystal_Screens.json','Resources'),
-    ('Resources/Crystal_Sendoff_Sheet.xlsx','Resources'),
     ('Resources/crystaldex_icon.png','Resources'),
-    ('Resources/CrystalDex_Library_Mastercopy.xlsx','Resources'),
-    ('Resources/CrystalDex_Library.xlsx','Resources'),
-    ('Resources/CrystalDex_Splash.png','Resources')],
-    hiddenimports=hiddenimports+['pdfplumber',
+    ('Resources/crystaldex_icon.ico','Resources'),
+    ('CrystalDex.db','.'),
+    ('CrystalDex_Library.xlsx','.'),
+    ('Resources/CrystalDex_Splash.png','Resources'),
+    ('CS_FS.xlsx','.'),
+    ('Index_FS_2021.xlsx','.'),
+    ('PEGIon_FS.xlsx','.'),
+    ('SaltRx_FS.xlsx','.'),
+    ('Wizard_Screen_Formulation_&_Scoring.xlsx','.')],
+        hiddenimports=hiddenimports+['pdfplumber',
     'pdfminer',
     'pdfminer.high_level',
     'pdfminer.layout',
@@ -48,7 +52,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='main',
+    name='CrystalDex',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -68,5 +72,6 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='main',
+    name='CrystalDex',
+    icon='Resources/crystaldex_icon.ico'
 )

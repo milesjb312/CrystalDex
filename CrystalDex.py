@@ -193,8 +193,8 @@ def get_values(value=None):
             values = [row[0] for row in cur.fetchall()]
             conn.close()
         return values
-    except Exception:
-        print(f'Database corrupted. Running reset_db...')
+    except Exception as e:
+        print(f'Database corrupted: {e}. Running reset_db...')
         reset_db()
         if value!=None:
             query = f"SELECT DISTINCT {value} FROM crystal_trays"
@@ -1113,7 +1113,7 @@ class CrystalDex_main:
         upload_crystal_screen_button.grid(column=4,row=0,sticky='nw')
         upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
-        def scrape_crystal_screen_data(self):
+        def scrape_crystal_screen_data():
             conn = connect_to_db()
             cur = conn.cursor()
             cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
