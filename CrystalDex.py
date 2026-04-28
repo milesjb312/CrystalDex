@@ -172,7 +172,7 @@ def get_trays(args_dict=None):
         query += " ORDER BY id"
 
         cur.execute(query, values)
-        rows = [dict(row) for row in cur.fetchall()]
+        rows = cur.fetchall()
         conn.close()
     else:
         cur.execute("SELECT * FROM crystal_trays")
@@ -291,7 +291,6 @@ def update_excel():
                 )
 
                 date_set = row["date_set"]
-                print(f'date_set: {date_set}')
                 protein = str(row["protein"])
 
                 # --- Build sheet name (Excel max 31 chars) ---
@@ -438,7 +437,7 @@ class CrystalDex_main:
         #https://tkdocs.com/tutorial/text.html#basics
         tk.Button(startup,text="Index New Tray",command=lambda: self.Index_Tray("new"),width=40).grid(column=0,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Update Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='nesw')
-        tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvest"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='nesw')
+        tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvesting"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='nesw')
 
@@ -640,7 +639,7 @@ class CrystalDex_main:
                 child.grid_configure(padx=5,pady=5)
             self.root.after_idle(self.refocus)
 
-        elif method=="old" or method=="harvest":
+        elif method=="old" or method=="harvesting":
             """This will let the user edit old trays by changing their subwell data.
             For reference, this is how the crystal_trays table is made:
             CREATE TABLE crystal_trays(
@@ -706,11 +705,29 @@ class CrystalDex_main:
             st_name_combobox = ttk.Combobox(old_tray_frame,textvariable=tray_var,values=trays,state="readonly")
             st_name_combobox.grid(column=0,row=5,sticky='ew')
 
-            tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
+            if method=="harvesting":
+                run = tk.StringVar()
+                run_label = ttk.Label(old_tray_frame,text=('What is the current Beamline Run?'))
+                run_label.grid(column=0,row=6)
+                runs = [0]
+                run_drop_down = ttk.Combobox(old_tray_frame,textvariable=run,values=runs)
+                run_drop_down.grid(column=0,row=7)
+                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),run.get())).grid(column=0,row=8)
+            else:
+                tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
 
-            def select_old_tray(tray_var):
+            def select_old_tray(tray_var,run=None):
                 self.tray_id = tray_var.split(", ")[0]
-                self.characterize_subwell("old")
+                if run is not None:
+                    self.run = run
+                    print(f'self.run = {self.run}')
+                    if run=="":
+                        messagebox.showerror(title="Empty Beamline Run",message="Please enter a valid Beamline Run number.")
+                        self.Index_Tray("harvesting")
+                    else:
+                        self.characterize_subwell("harvesting")
+                else:
+                    self.characterize_subwell("old")
 
             def reget_trays():
                 st_name_label = ttk.Label(old_tray_frame,text=('Please select a tray to edit.'))
@@ -729,11 +746,11 @@ class CrystalDex_main:
                 st_name_combobox = ttk.Combobox(old_tray_frame,textvariable=tray_var,values=trays,state="readonly")
                 st_name_combobox.grid(column=0,row=5,sticky='ew')
 
-            #If the user is certain that none of the trays that show up are theirs:
-            none_of_the_above_label = ttk.Label(old_tray_frame,text="If none of the above match your tray, click 'make new tray':")
-            none_of_the_above_label.grid(column=3,row=6)
-            tk.Button(old_tray_frame,text="make new tray",command=lambda: self.Index_Tray("new")).grid(column=3,row=7,sticky='W')
-
+            if method=="old":
+                #If the user is certain that none of the trays that show up are theirs:
+                none_of_the_above_label = ttk.Label(old_tray_frame,text="If none of the above match your tray, click 'make new tray':")
+                none_of_the_above_label.grid(column=3,row=6)
+                tk.Button(old_tray_frame,text="make new tray",command=lambda: self.Index_Tray("new")).grid(column=3,row=7,sticky='W')
 
     def characterize_subwell(self,method):
         """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
@@ -868,8 +885,9 @@ class CrystalDex_main:
             vial = tk.StringVar()
             vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
-            self.vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial,values=self.vials_available,state='readonly')
-            self.vial_dropdown.grid(column=2,row=14)
+            vials_available=[i for i in range(1,401)]
+            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial,values=vials_available,state='readonly')
+            vial_dropdown.grid(column=2,row=14)
 
         notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
         notes_label.grid(column=1,row=13+x)
@@ -915,8 +933,9 @@ class CrystalDex_main:
             return major_axis
         
         def get_vial_and_run():
-            vial_and_run = vial.get()
-            return vial_and_run
+            if method=="harvesting":
+                return str(vial.get()+":"+self.run)
+            return ""
         
         def get_date_snapped():
             date_snapped = str(datetime.now().strftime('%m-%d-%Y'))
@@ -925,8 +944,7 @@ class CrystalDex_main:
         def get_harvester():
             if method=="harvesting":
                 return harvester.get()
-            else:
-                return "None"                
+            return "None"
 
         tk.Button(subwell_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
