@@ -205,7 +205,7 @@ def get_values(value=None):
 
 def update_excel():
     """This will update the excel mirror that reflects what's going on in the CrystalDex.db database.
-    For reference, this is how the crystal_trays table is made:
+    For reference, this is how stuff's made:
         CREATE TABLE crystal_trays(
                 id INTEGER PRIMARY KEY,
                 crystal_screen_id INTEGER NOT NULL,
@@ -217,31 +217,109 @@ def update_excel():
                 top_left_protein_concentration REAL NOT NULL,
                 top_right_protein_concentration REAL NOT NULL,
                 bottom_left_protein_concentration REAL NOT NULL);
+        CREATE TABLE subwells(
+            id INTEGER PRIMARY KEY,
+            tray_id INTEGER NOT NULL,
+            row TEXT NOT NULL,
+            column INT NOT NULL,
+            subwell TEXT NOT NULL,
+            picture_path TEXT NOT NULL,
+            conditions TEXT NOT NULL,
+            minor_axis REAL NOT NULL,
+            major_axis REAL NOT NULL,
+            number_of_crystals INT NOT NULL,
+            shape TEXT NOT NULL,
+            possible_salt_crystals TEXT NOT NULL,
+            precipitation TEXT NOT NULL,
+            microcrystals TEXT NOT NULL,
+            glassy_protein_or_artifacts TEXT NOT NULL,
+            harvester TEXT,
+            vial_and_run TEXT,
+            date_snapped TEXT NOT NULL,
+            notes TEXT,
+            FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
+            ON DELETE CASCADE);
     """
     conn = connect_to_db()
 
-    df = pd.read_sql_query("""SELECT id,
-                            crystal_screen_id,
-                            date_set,
-                            chaperone,
-                            crystal_screen,
-                            protein,
-                            custom_tags,
-                            top_left_protein_concentration,
-                            top_right_protein_concentration,
-                            bottom_left_protein_concentration
-                            FROM crystal_trays
-                            ORDER BY date_set DESC""", conn)
+    df = pd.read_sql_query("""SELECT
+        t.id AS tray_id,
+        t.crystal_screen_id,
+        t.date_set,
+        t.chaperone,
+        t.crystal_screen,
+        t.protein,
+        t.custom_tags,
+        t.top_left_protein_concentration,
+        t.top_right_protein_concentration,
+        t.bottom_left_protein_concentration,
+        s.id AS subwell_id,
+        s.tray_id AS subwell_tray_id,
+        s.row,
+        s.column,
+        s.subwell,
+        s.picture_path,
+        s.conditions,
+        s.minor_axis,
+        s.major_axis,
+        s.number_of_crystals,
+        s.shape,
+        s.possible_salt_crystals,
+        s.precipitation,
+        s.microcrystals,
+        s.glassy_protein_or_artifacts,
+        s.harvester,
+        s.vial_and_run,
+        s.date_snapped,
+        s.notes
+        FROM crystal_trays t JOIN subwells s ON t.id = s.tray_id""", conn)
     conn.close()
 
-    with pd.ExcelWriter(local_library, engine="openpyxl") as writer:
-        for screen_name, group in df.groupby("name"):
-            sheet_name = screen_name[:31]  # Excel limit
-            group.drop(columns=["name"]).to_excel(
+    with pd.ExcelWriter(local_library, engine="openpyxl",mode="w") as writer:
+        if df.empty:
+            pd.DataFrame({"info": ["No data available"]}).to_excel(
                 writer,
-                sheet_name=sheet_name,
+                sheet_name="Empty",
                 index=False
             )
+        else:
+            for tray_id, group in df.groupby("tray_id"):
+                # --- Extract tray-level metadata (first row) ---
+                row = group.iloc[0]
+                group['picture_path'] = group['picture_path'].apply(
+                    lambda x: f'=HYPERLINK("{x}", "Open Image")' if pd.notnull(x) else ""
+                )
+
+                date_set = row["date_set"]
+                print(f'date_set: {date_set}')
+                protein = str(row["protein"])
+
+                # --- Build sheet name (Excel max 31 chars) ---
+                base_name = f"{date_set}_{protein}"
+                sheet_name = base_name[:31]
+
+                # --- Create header (single-row dataframe) ---
+                header_df = pd.DataFrame([{
+                    "Tray ID": tray_id,
+                    "Date Set": date_set,
+                    "Chaperone": row["chaperone"],
+                    "Crystal Screen": row["crystal_screen"],
+                    "Protein": protein,
+                    "Custom Tags": row["custom_tags"],
+                    "Top Left Protein Concentration": row['top_left_protein_concentration'],
+                    "Top Right Protein Concentration": row['top_right_protein_concentration'],
+                    "Bottom Left Protein Concentration": row['bottom_left_protein_concentration']
+                }])
+
+                # --- Write to Excel ---
+                header_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+                group.to_excel(
+                    writer,
+                    sheet_name=sheet_name,
+                    startrow=3,  # leave space after header
+                    index=False
+                )
 
 """MICROSCOPE APP FUNCTIONS"""
 #In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
