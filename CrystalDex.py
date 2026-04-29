@@ -1127,12 +1127,12 @@ class CrystalDex_main:
                         ref_col = formulation_sheet[f'{col_letter}4'].value
                         if ref:
                             refs.append(str(ref))
-                        if ref_col:
-                            if ref_col.strip() in ['pH', 'PH', 'Ph', 'ph']:
-                                refs.insert(-1,str(ref_col))
-                            elif ref_col.strip() in ['Average','average']:
-                                ref_col_ave = formulation_sheet[f'{col_letter}5'].value
-                                refs.insert(-1,str('Average '+ref_col_ave))
+                            if ref_col:
+                                if ref_col.strip() in ['pH', 'PH', 'Ph', 'ph']:
+                                    refs.insert(-1,str(ref_col))
+                                elif ref_col.strip() in ['Average','average']:
+                                    ref_col_ave = formulation_sheet[f'{col_letter}5'].value
+                                    refs.insert(-1,str('Average '+ref_col_ave))
 
                     condition = " ".join(refs)
                     condition_number = row[0].row-5
