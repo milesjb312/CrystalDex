@@ -55,6 +55,7 @@ crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
 server_crystal_pictures = os.path.join(CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
 local_library = os.path.join(script_dir,"CrystalDex_Library.xlsx")
+run_sheet = os.path.join(script_dir,"Run.xlsx")
 CrystalDex_Library = os.path.join(CrystalDex_dir,"CrystalDex_Library.xlsx")
 Crystal_Sendoff = os.path.join(CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
 crystal_screens_path = os.path.join(CrystalDex_dir,"Crystal_Screens.json")
@@ -83,7 +84,7 @@ def reset_db():
     DROP TABLE IF EXISTS crystal_screens;
     DROP TABLE IF EXISTS conditions;
     DROP TABLE IF EXISTS crystal_trays;
-    DROP TABLE IF EXISTS subwells;
+    DROP TABLE IF EXISTS crystals;
     COMMIT;
     """)
     conn.commit()
@@ -113,7 +114,7 @@ def reset_db():
                 top_left_protein_concentration REAL NOT NULL,
                 top_right_protein_concentration REAL NOT NULL,
                 bottom_left_protein_concentration REAL NOT NULL);
-    CREATE TABLE subwells(
+    CREATE TABLE crystals(
                 id INTEGER PRIMARY KEY,
                 tray_id INTEGER NOT NULL,
                 row TEXT NOT NULL,
@@ -130,7 +131,9 @@ def reset_db():
                 microcrystals TEXT NOT NULL,
                 glassy_protein_or_artifacts TEXT NOT NULL,
                 harvester TEXT,
-                vial_and_run TEXT,
+                run INTEGER,
+                vial INTEGER,
+                port TEXT,
                 date_snapped TEXT NOT NULL,
                 notes TEXT,
                 FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
@@ -204,42 +207,7 @@ def get_values(value=None):
         return values
 
 def update_excel():
-    """This will update the excel mirror that reflects what's going on in the CrystalDex.db database.
-    For reference, this is how stuff's made:
-        CREATE TABLE crystal_trays(
-                id INTEGER PRIMARY KEY,
-                crystal_screen_id INTEGER NOT NULL,
-                date_set TEXT NOT NULL,
-                chaperone TEXT,
-                crystal_screen TEXT NOT NULL,
-                protein TEXT NOT NULL,
-                custom_tags TEXT,
-                top_left_protein_concentration REAL NOT NULL,
-                top_right_protein_concentration REAL NOT NULL,
-                bottom_left_protein_concentration REAL NOT NULL);
-        CREATE TABLE subwells(
-            id INTEGER PRIMARY KEY,
-            tray_id INTEGER NOT NULL,
-            row TEXT NOT NULL,
-            column INT NOT NULL,
-            subwell TEXT NOT NULL,
-            picture_path TEXT NOT NULL,
-            conditions TEXT NOT NULL,
-            minor_axis REAL NOT NULL,
-            major_axis REAL NOT NULL,
-            number_of_crystals INT NOT NULL,
-            shape TEXT NOT NULL,
-            possible_salt_crystals TEXT NOT NULL,
-            precipitation TEXT NOT NULL,
-            microcrystals TEXT NOT NULL,
-            glassy_protein_or_artifacts TEXT NOT NULL,
-            harvester TEXT,
-            vial_and_run TEXT,
-            date_snapped TEXT NOT NULL,
-            notes TEXT,
-            FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
-            ON DELETE CASCADE);
-    """
+    """This will update the excel mirror that reflects what's going on in the CrystalDex.db database."""
     conn = connect_to_db()
 
     df = pd.read_sql_query("""SELECT
@@ -253,26 +221,28 @@ def update_excel():
         t.top_left_protein_concentration,
         t.top_right_protein_concentration,
         t.bottom_left_protein_concentration,
-        s.id AS subwell_id,
-        s.tray_id AS subwell_tray_id,
-        s.row,
-        s.column,
-        s.subwell,
-        s.picture_path,
-        s.conditions,
-        s.minor_axis,
-        s.major_axis,
-        s.number_of_crystals,
-        s.shape,
-        s.possible_salt_crystals,
-        s.precipitation,
-        s.microcrystals,
-        s.glassy_protein_or_artifacts,
-        s.harvester,
-        s.vial_and_run,
-        s.date_snapped,
-        s.notes
-        FROM crystal_trays t JOIN subwells s ON t.id = s.tray_id""", conn)
+        c.id AS crystal_id,
+        c.tray_id AS crystal_tray_id,
+        c.row,
+        c.column,
+        c.subwell,
+        c.picture_path,
+        c.conditions,
+        c.minor_axis,
+        c.major_axis,
+        c.number_of_crystals,
+        c.shape,
+        c.possible_salt_crystals,
+        c.precipitation,
+        c.microcrystals,
+        c.glassy_protein_or_artifacts,
+        c.harvester,
+        c.run,
+        c.vial,
+        c.port,
+        c.date_snapped,
+        c.notes
+        FROM crystal_trays t JOIN crystals c ON t.id = c.tray_id""", conn)
     conn.close()
 
     with pd.ExcelWriter(local_library, engine="openpyxl",mode="w") as writer:
@@ -440,6 +410,7 @@ class CrystalDex_main:
         tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvesting"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='nesw')
+        tk.Button(startup,text='Transfer Crystals',command=self.Crystal_Transfer,width=40).grid(column=1,row=1,padx=50,pady=50,sticky='nesw')
 
     def load_SeBaView(self):
         """This allows the user to open SeBaView software whenever CrystalDex is running. In the future, I'd like to add a configuration method that lets them choose other
@@ -516,7 +487,7 @@ class CrystalDex_main:
 
     def add_tray(self,crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
         """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it 
-        routes into the characterize_subwells function.
+        routes into the characterize_crystals function.
         For reference, this is how the crystal_trays table is made:
         CREATE TABLE crystal_trays(
                 id INTEGER PRIMARY KEY,
@@ -547,7 +518,7 @@ class CrystalDex_main:
                 self.tray_id = str(cur.lastrowid).strip()
                 conn.commit()
                 conn.close()
-                self.characterize_subwell(method="new")
+                self.characterize_crystal(method="new")
         else:
             conn = connect_to_db()
             cur = conn.cursor()
@@ -559,7 +530,7 @@ class CrystalDex_main:
             self.tray_id = str(cur.lastrowid).strip()
             conn.commit()
             conn.close()
-            self.characterize_subwell(method="new")
+            self.characterize_crystal(method="new")
 
 
     def Index_Tray(self,method):
@@ -660,7 +631,7 @@ class CrystalDex_main:
             self.root.after_idle(self.refocus)
 
         elif method=="old" or method=="harvesting":
-            """This will let the user edit old trays by changing their subwell data.
+            """This will let the user edit old trays by changing adding crystal data.
             For reference, this is how the crystal_trays table is made:
             CREATE TABLE crystal_trays(
                     id INTEGER PRIMARY KEY,
@@ -732,7 +703,7 @@ class CrystalDex_main:
                 runs = [0]
                 run_drop_down = ttk.Combobox(old_tray_frame,textvariable=run,values=runs)
                 run_drop_down.grid(column=0,row=7)
-                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),run.get())).grid(column=0,row=8)
+                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),int(run.get()))).grid(column=0,row=8)
             else:
                 tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
 
@@ -745,9 +716,9 @@ class CrystalDex_main:
                         messagebox.showerror(title="Empty Beamline Run",message="Please enter a valid Beamline Run number.")
                         self.Index_Tray("harvesting")
                     else:
-                        self.characterize_subwell("harvesting")
+                        self.characterize_crystal("harvesting")
                 else:
-                    self.characterize_subwell("old")
+                    self.characterize_crystal("old")
 
             def reget_trays():
                 st_name_label = ttk.Label(old_tray_frame,text=('Please select a tray to edit.'))
@@ -772,9 +743,9 @@ class CrystalDex_main:
                 none_of_the_above_label.grid(column=3,row=6)
                 tk.Button(old_tray_frame,text="make new tray",command=lambda: self.Index_Tray("new")).grid(column=3,row=7,sticky='W')
 
-    def characterize_subwell(self,method):
-        """Creates a new subwell entry in the wells table of the CrystalDex.db. The subwells table is formatted as follows:
-        CREATE TABLE subwells(
+    def characterize_crystal(self,method):
+        """Creates a new crystal entry in the crystals table of the CrystalDex.db. The crystals table is formatted as follows:
+        CREATE TABLE crystals(
                 id INTEGER PRIMARY KEY,
                 tray_id INTEGER NOT NULL,
                 row TEXT NOT NULL,
@@ -791,7 +762,9 @@ class CrystalDex_main:
                 microcrystals TEXT NOT NULL,
                 glassy_protein_or_artifacts TEXT NOT NULL,
                 harvester TEXT,
-                vial_and_run TEXT,
+                run INTEGER,
+                vial INTEGER,
+                port TEXT,
                 date_snapped TEXT NOT NULL,
                 notes TEXT,
                 FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
@@ -804,55 +777,55 @@ class CrystalDex_main:
         self.root.grid_propagate(False)
         self.root.state('normal')
         self.root.geometry(f"{self.screen_width // 4}x{self.screen_height}+0+0")
-        subwell_frame = ttk.Frame(self.root,padding="3 3 12 12")
-        subwell_frame.grid(column=0,row=0,sticky='nw')
+        crystal_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        crystal_frame.grid(column=0,row=0,sticky='nw')
         self.root.columnconfigure(0,weight=1)
         self.root.rowconfigure(0,weight=1)
         self.root.after_idle(self.refocus)
         self.enforce_position()
 
-        ensure_magnified_label = ttk.Label(subwell_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
+        ensure_magnified_label = ttk.Label(crystal_frame,text="MAKE SURE the microscope is fully\nmagnified before taking any pictures.\nALSO ENSURE that the SeBaView\n camera is at 80% magnification.")
         ensure_magnified_label.grid(column=1,row=1)
 
         well_row = tk.StringVar()
-        well_row_label = ttk.Label(subwell_frame,text="Well row:")
+        well_row_label = ttk.Label(crystal_frame,text="Well row:")
         well_row_label.grid(column=1,row=2)
         well_row_values = ['A','B','C','D','E','F','G','H']
-        well_row_drop_down = ttk.Combobox(subwell_frame,textvariable=well_row,values=well_row_values,state='readonly')
+        well_row_drop_down = ttk.Combobox(crystal_frame,textvariable=well_row,values=well_row_values,state='readonly')
         well_row_drop_down.grid(column=2,row=2)
 
         well_column = tk.IntVar()
-        well_column_label = ttk.Label(subwell_frame,text="Well column:")
+        well_column_label = ttk.Label(crystal_frame,text="Well column:")
         well_column_label.grid(column=1,row=3)
         well_column_values = ['1','2','3','4','5','6','7','8','9','10','11','12']
-        well_column_drop_down = ttk.Combobox(subwell_frame,textvariable=well_column,values=well_column_values,state='readonly')
+        well_column_drop_down = ttk.Combobox(crystal_frame,textvariable=well_column,values=well_column_values,state='readonly')
         well_column_drop_down.grid(column=2,row=3)
 
         subwell = tk.StringVar()
         subwell_values = ['top_left','top_right','bottom_left']
-        subwell_label = ttk.Label(subwell_frame,text="subwell:")
+        subwell_label = ttk.Label(crystal_frame,text="subwell:")
         subwell_label.grid(column=1,row=4)
-        subwell_drop_down = ttk.Combobox(subwell_frame,textvariable=subwell,values=subwell_values,state='readonly')
+        subwell_drop_down = ttk.Combobox(crystal_frame,textvariable=subwell,values=subwell_values,state='readonly')
         subwell_drop_down.grid(column=2,row=4)
 
         crystal_width = tk.StringVar()
-        crystal_width_label = ttk.Label(subwell_frame,text='crystal width:')
+        crystal_width_label = ttk.Label(crystal_frame,text='crystal width:')
         crystal_width_label.grid(column=1,row=5)
-        crystal_width_entry = ttk.Entry(subwell_frame,textvariable=crystal_width,state=tk.DISABLED)
+        crystal_width_entry = ttk.Entry(crystal_frame,textvariable=crystal_width,state=tk.DISABLED)
         crystal_width_entry.grid(column=2,row=5)
-        um_width_label = ttk.Label(subwell_frame,text='um')
+        um_width_label = ttk.Label(crystal_frame,text='um')
         um_width_label.grid(column=3,row=5)
 
         crystal_height = tk.StringVar()
-        crystal_height_label = ttk.Label(subwell_frame,text='crystal height:')
+        crystal_height_label = ttk.Label(crystal_frame,text='crystal height:')
         crystal_height_label.grid(column=1,row=6)
-        crystal_height_entry = ttk.Entry(subwell_frame,textvariable=crystal_height,state=tk.DISABLED)
+        crystal_height_entry = ttk.Entry(crystal_frame,textvariable=crystal_height,state=tk.DISABLED)
         crystal_height_entry.grid(column=2,row=6)
-        um_row_label = ttk.Label(subwell_frame,text='um')
+        um_row_label = ttk.Label(crystal_frame,text='um')
         um_row_label.grid(column=3,row=6)
 
         number_of_crystals = tk.IntVar()
-        number_of_crystals_label = ttk.Label(subwell_frame,text='# of harvestable crystals (optional):')
+        number_of_crystals_label = ttk.Label(crystal_frame,text='# of harvestable crystals (optional):')
         number_of_crystals_label.grid(column=1,row=7)
 
         def validate_int_range(new_value):
@@ -864,54 +837,54 @@ class CrystalDex_main:
             return False
         vcmd = (self.root.register(validate_int_range), "%P")
 
-        number_of_crystals_entry = ttk.Spinbox(subwell_frame,from_=0,to=100,textvariable=number_of_crystals,validate="key",validatecommand=vcmd)
+        number_of_crystals_entry = ttk.Spinbox(crystal_frame,from_=0,to=100,textvariable=number_of_crystals,validate="key",validatecommand=vcmd)
         number_of_crystals_entry.grid(column=2,row=7)
 
         shape = tk.StringVar()
-        shape_label = ttk.Label(subwell_frame,text='Shape of crystals:')
+        shape_label = ttk.Label(crystal_frame,text='Shape of crystals:')
         shape_label.grid(column=1,row=8)
-        shape_entry = ttk.Entry(subwell_frame,textvariable=shape)
+        shape_entry = ttk.Entry(crystal_frame,textvariable=shape)
         shape_entry.grid(column=2,row=8)
 
         possible_salt_crystals = tk.BooleanVar()
-        possible_salt_crystals_label = ttk.Label(subwell_frame,text="Possibly a salt crystal")
+        possible_salt_crystals_label = ttk.Label(crystal_frame,text="Possibly a salt crystal")
         possible_salt_crystals_label.grid(column=1,row=9)
-        ttk.Checkbutton(subwell_frame,variable=possible_salt_crystals,onvalue=True,offvalue=False).grid(column=2,row=9)
+        ttk.Checkbutton(crystal_frame,variable=possible_salt_crystals,onvalue=True,offvalue=False).grid(column=2,row=9)
 
         precipitation = tk.BooleanVar()
-        precipitation_label = ttk.Label(subwell_frame,text="Precipitation present")
+        precipitation_label = ttk.Label(crystal_frame,text="Precipitation present")
         precipitation_label.grid(column=1,row=10)
-        ttk.Checkbutton(subwell_frame,variable=precipitation,onvalue=True,offvalue=False).grid(column=2,row=10)
+        ttk.Checkbutton(crystal_frame,variable=precipitation,onvalue=True,offvalue=False).grid(column=2,row=10)
 
         microcrystals = tk.BooleanVar()
-        microcrystals_label = ttk.Label(subwell_frame,text="Microcrystals present")
+        microcrystals_label = ttk.Label(crystal_frame,text="Microcrystals present")
         microcrystals_label.grid(column=1,row=11)
-        ttk.Checkbutton(subwell_frame,variable=microcrystals,onvalue=True,offvalue=False).grid(column=2,row=11)
+        ttk.Checkbutton(crystal_frame,variable=microcrystals,onvalue=True,offvalue=False).grid(column=2,row=11)
 
         glassy_protein_or_artifacts = tk.BooleanVar()
-        glassy_protein_or_artifacts_label = ttk.Label(subwell_frame,text="Glassy protein or artifacts present")
+        glassy_protein_or_artifacts_label = ttk.Label(crystal_frame,text="Glassy protein or artifacts present")
         glassy_protein_or_artifacts_label.grid(column=1,row=12)
-        ttk.Checkbutton(subwell_frame,variable=glassy_protein_or_artifacts,onvalue=True,offvalue=False).grid(column=2,row=12)
+        ttk.Checkbutton(crystal_frame,variable=glassy_protein_or_artifacts,onvalue=True,offvalue=False).grid(column=2,row=12)
 
         x = 0
         if method=="harvesting":
             x = 2
             harvester = tk.StringVar()
-            harvester_label = ttk.Label(subwell_frame,text='Full name of harvester:')
+            harvester_label = ttk.Label(crystal_frame,text='Full name of harvester:')
             harvester_label.grid(column=1,row=13)
-            harvester_entry = ttk.Entry(subwell_frame,textvariable=harvester)
+            harvester_entry = ttk.Entry(crystal_frame,textvariable=harvester)
             harvester_entry.grid(column=2,row=13)
 
             vial = tk.StringVar()
-            vial_label = ttk.Label(subwell_frame,text='Enter vial number:')
+            vial_label = ttk.Label(crystal_frame,text='Enter vial number:')
             vial_label.grid(column=1,row=14)
             vials_available=[i for i in range(1,401)]
-            vial_dropdown = ttk.Combobox(subwell_frame,textvariable=vial,values=vials_available,state='readonly')
+            vial_dropdown = ttk.Combobox(crystal_frame,textvariable=vial,values=vials_available,state='readonly')
             vial_dropdown.grid(column=2,row=14)
 
-        notes_label = ttk.Label(subwell_frame,text="Crystallographer notes:")
+        notes_label = ttk.Label(crystal_frame,text="Crystallographer notes:")
         notes_label.grid(column=1,row=13+x)
-        notes = tk.Text(subwell_frame, width = 50, height = 5)
+        notes = tk.Text(crystal_frame, width = 50, height = 5)
         notes.grid(column=1,row=14+x,columnspan=2)
 
         def get_crystal_screen():
@@ -952,13 +925,8 @@ class CrystalDex_main:
             major_axis = max(crystal_height.get(),crystal_width.get())
             return major_axis
         
-        def get_vial_and_run():
-            if method=="harvesting":
-                return str(vial.get()+":"+self.run)
-            return ""
-        
         def get_date_snapped():
-            date_snapped = str(datetime.now().strftime('%m-%d-%Y'))
+            date_snapped = str(datetime.now().strftime('%m-%d-%Y-%H-%M-%S'))
             return date_snapped
         
         def get_harvester():
@@ -966,22 +934,25 @@ class CrystalDex_main:
                 return harvester.get()
             return "None"
 
-        tk.Button(subwell_frame,text ='Measure Crystal',
+        tk.Button(crystal_frame,text ='Measure Crystal',
                    command=lambda: self.measure_crystal(update_crystal_size_vars)).grid(column=1,row=15+x)
         
-        tk.Button(subwell_frame,text = 'Take picture and proceed to next well',
-                  command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),get_vial_and_run(),get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
+        if method=="harvesting":
+            tk.Button(crystal_frame,text = 'Take picture and proceed to next well',
+                      command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),self.run,int(vial.get()),get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
+        else:
+            tk.Button(crystal_frame,text = 'Take picture and proceed to next well',
+                      command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),0,0,get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
 
-        tk.Button(subwell_frame,text="Done with this tray",
+        tk.Button(crystal_frame,text="Done with this tray",
                    command=lambda: self.startup()).grid(column=1,row=17+x)
         
-        for child in subwell_frame.winfo_children():
+        for child in crystal_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
 
-    def take_picture(self,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes, method):
+    def take_picture(self,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,run,vial,date_snapped,notes, method):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
-        #image_title = f'{self.tray_vars['chaperone']}_{self.tray_vars['protein']}_{self.tray_vars['crystal_screen']}_{self.subwell_vars['well_row'].get()}{self.subwell_vars['well_column'].get()}_{self.subwell_vars['subwell'].get()}_{self.tray_vars['date_set']}_{self.subwell_vars['date_snapped']}'
-        image_title = f'{self.tray_id}_{row}{column}_{subwell}'
+        image_title = f'{self.tray_id}_{row}{column}_{subwell}_{date_snapped}'
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
         safe_click(self.SeBaView_wrapper,(55,70))
@@ -1018,8 +989,8 @@ class CrystalDex_main:
 
         self.root.after_idle(self.refocus)
 
-        """ The subwells table is formatted as follows:
-        CREATE TABLE subwells(
+        """ The crystals table is formatted as follows:
+        CREATE TABLE crystals(
                 id INTEGER PRIMARY KEY,
                 tray_id INTEGER NOT NULL,
                 row TEXT NOT NULL,
@@ -1036,7 +1007,9 @@ class CrystalDex_main:
                 microcrystals TEXT NOT NULL,
                 glassy_protein_or_artifacts TEXT NOT NULL,
                 harvester TEXT,
-                vial_and_run TEXT,
+                run INTEGER,
+                vial INTEGER,
+                port TEXT,
                 date_snapped TEXT NOT NULL,
                 notes TEXT,
                 FOREIGN KEY (tray_id) REFERENCES crystal_trays(id)
@@ -1045,9 +1018,9 @@ class CrystalDex_main:
 
         conn = connect_to_db()
         cur = conn.cursor()
-        cur.execute("""INSERT INTO subwells (tray_id, row, column, subwell, picture_path, conditions, minor_axis, major_axis, number_of_crystals, shape,
-                    possible_salt_crystals, precipitation, microcrystals, glassy_protein_or_artifacts, harvester, vial_and_run, date_snapped, notes) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (self.tray_id,row,column,subwell,picture_path,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,vial_and_run,date_snapped,notes))
+        cur.execute("""INSERT INTO crystals (tray_id, row, column, subwell, picture_path, conditions, minor_axis, major_axis, number_of_crystals, shape,
+                    possible_salt_crystals, precipitation, microcrystals, glassy_protein_or_artifacts, harvester, run, vial, date_snapped, notes) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (self.tray_id,row,column,subwell,picture_path,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,run,vial,date_snapped,notes))
         conn.commit()
         conn.close()        
 
@@ -1728,3 +1701,140 @@ class CrystalDex_main:
                         self.startup()
 
                     tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save_screens).grid(row=5,column=3)
+
+    def Crystal_Transfer(self):
+        self.clear_widgets()
+        self.add_menu()
+        crystal_transfer_frame = ttk.Frame(self.root,padding="3 3 12 12")
+        self.current_frame = crystal_transfer_frame
+        crystal_transfer_frame.grid(column=0,row=0,sticky='nw')
+
+        def get_runs():
+            conn = connect_to_db()
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            query = f"SELECT DISTINCT run FROM crystals"
+            cur.execute(query)
+            runs = [row[0] for row in cur.fetchall()]
+            conn.close()
+            return runs
+
+        runs = get_runs()
+        run = tk.StringVar()
+        ttk.Label(crystal_transfer_frame, text="Select the current run:").grid(column=1,row=1)
+        ttk.Combobox(crystal_transfer_frame,values=runs,textvariable=run).grid(column=1,row=2)
+        ttk.Button(crystal_transfer_frame,text="Transfer Crystals in Selected Run",command=lambda:transfer(int(run.get()))).grid(column=1,row=3)
+        
+        def get_vials_and_ports(run):
+            conn = connect_to_db()
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            query = f"SELECT vial, port FROM crystals WHERE run=?"
+            cur.execute(query,(run,))
+            vials_and_ports = {row[0]:row[1] for row in cur.fetchall()}
+            conn.close()
+            return vials_and_ports
+
+        def transfer(run):
+            self.clear_widgets()
+            self.add_menu()
+            transfer_frame = ttk.Frame(self.root,padding="3 3 12 12")
+            self.current_frame = transfer_frame
+            transfer_frame.grid(column=0,row=0,sticky='nw')
+
+            vials_and_ports = get_vials_and_ports(run)
+
+            transfer_tree = ttk.Treeview(
+                transfer_frame,
+                columns=("vial", "port"),
+                show="headings",
+                height=25
+            )
+
+            transfer_tree.heading("vial", text="Vial")
+            transfer_tree.heading("port", text="Port")
+
+            transfer_tree.column("vial", width=800)
+            transfer_tree.column("port", width=800)
+
+            transfer_tree.grid(row=0, column=0)
+
+            for vial, port in vials_and_ports.items():
+                transfer_tree.insert("","end",values=(vial,port))
+            scrollbar = ttk.Scrollbar(transfer_frame, orient="vertical",command=transfer_tree.yview)
+            transfer_tree.configure(yscrollcommand=scrollbar.set)
+            scrollbar.grid(row=0,column=1,sticky="ns")
+
+            def on_select(event):
+                selected = transfer_tree.selection()
+                if not selected:
+                    return
+                item = selected[0]
+                #values = transfer_tree.item(item, "values")
+
+                x, y, width, height = transfer_tree.bbox(item, "#2")
+
+                value = transfer_tree.set(item, "port")
+
+                entry = ttk.Entry(transfer_tree)
+                entry.place(x=x, y=y, width=width, height=height)
+                entry.insert(0, value)
+                entry.focus()
+                def save_edit(event=None):
+                    transfer_tree.set(item, "port", entry.get())
+                    entry.destroy()
+                entry.bind("<Return>", save_edit)
+                entry.bind("<FocusOut>", save_edit)
+            transfer_tree.bind("<<TreeviewSelect>>", on_select)
+
+            ttk.Button(transfer_frame,text="Save, Print Run Sheet, and Return to Startup Menu",command=lambda:save()).grid(column=0,row=2)
+
+            def save():
+                updates = []
+                for item in transfer_tree.get_children():
+                    vial, port = transfer_tree.item(item, "values")
+                    updates.append((port, run, int(vial)))
+                print(f'updates: {updates}')
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.executemany("""UPDATE crystals SET port=? WHERE run=? AND vial=?""",updates)
+                conn.commit()
+                conn.close()
+                self.run_sheet(run)
+                self.startup()
+
+    def run_sheet(self,run):
+        """This creates and prints an Excel sheet depicting each of the crystals in the given run."""
+        conn = connect_to_db()
+
+        df = pd.read_sql_query("""SELECT
+        t.id AS tray_id,
+        t.protein AS Protein,
+        c.id AS Crystal_id,
+        c.tray_id AS Crystal_tray_id,
+        c.conditions AS Conditions,
+        c.shape AS Shape,
+        c.harvester AS Harvester,
+        c.run AS Run,
+        c.port AS Port
+        FROM crystal_trays t JOIN crystals c ON t.id = c.tray_id""", conn)
+        conn.close()
+
+        df = df[df["Run"] == run]
+
+        with pd.ExcelWriter(run_sheet, engine="openpyxl",mode="w") as writer:
+            if df.empty:
+                pd.DataFrame({"info": ["No data available"]}).to_excel(
+                    writer,
+                    sheet_name="Empty",
+                    index=False
+                )
+            else:
+                base_name = f"Run {run}"
+                sheet_name = base_name[:31]
+                df.to_excel(
+                    writer,
+                    sheet_name=sheet_name,
+                    startrow=0,
+                    index=False
+                )
