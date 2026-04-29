@@ -530,17 +530,37 @@ class CrystalDex_main:
                 top_right_protein_concentration REAL NOT NULL,
                 bottom_left_protein_concentration REAL NOT NULL);
         """
-        conn = connect_to_db()
-        cur = conn.cursor()
-        cur.execute("""
-        INSERT INTO crystal_trays
-        (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
-        self.tray_id = str(cur.lastrowid).strip()
-        conn.commit()
-        conn.close()
-        self.characterize_subwell(method="new")
+        possible_duplicates = get_trays({'date_set':date_set,"crystal_screen":crystal_screen,"top_left_protein_concentration":top_left,"top_right_protein_concentration":top_right,"bottom_left_protein_concentration":bottom_left})
+        possible_duplicates = [[possible_duplicate] for possible_duplicate in possible_duplicates]
+        if len(possible_duplicates)>0:
+            make_new_anyway = messagebox.askyesno(title="Possible Duplicates",message=f"The following tray(s) may be duplicates. Make a new tray anyway? If you choose 'No', you will be routed to the Update Tray function. {possible_duplicates}")
+            if not make_new_anyway:
+                self.Index_Tray('old')
+            else:
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.execute("""
+                INSERT INTO crystal_trays
+                (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+                self.tray_id = str(cur.lastrowid).strip()
+                conn.commit()
+                conn.close()
+                self.characterize_subwell(method="new")
+        else:
+            conn = connect_to_db()
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT INTO crystal_trays
+            (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+            self.tray_id = str(cur.lastrowid).strip()
+            conn.commit()
+            conn.close()
+            self.characterize_subwell(method="new")
+
 
     def Index_Tray(self,method):
         """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
