@@ -1122,18 +1122,21 @@ class CrystalDex_main:
             sheet_names = cswb.sheetnames
             formulation_sheet = cswb[sheet_names[0]]
             print(f'formulation_sheet.title: {formulation_sheet.title}')
-            for row in formulation_sheet.iter_rows(min_row=6, max_row=109, min_col=1, max_col=21):
+            for row in formulation_sheet.iter_rows(min_row=6, max_row=109, min_col=1, max_col=26):
                 if row[0].value not in [None, 0]:
                     refs = []
                     for c, cell in enumerate(row, start=1):
                         col_letter = get_column_letter(c)
                         ref = cell.value
-                        ref_pH = formulation_sheet[f'{col_letter}4'].value
+                        ref_col = formulation_sheet[f'{col_letter}4'].value
                         if ref:
                             refs.append(str(ref))
-                        if ref_pH:
-                            if ref_pH.strip() in ['pH', 'PH', 'Ph', 'ph']:
-                                refs.insert(-1,str(ref_pH))
+                        if ref_col:
+                            if ref_col.strip() in ['pH', 'PH', 'Ph', 'ph']:
+                                refs.insert(-1,str(ref_col))
+                            elif ref_col.strip() in ['Average','average']:
+                                ref_col_ave = formulation_sheet[f'{col_letter}5'].value
+                                refs.insert(-1,str('Average '+ref_col_ave))
 
                     condition = " ".join(refs)
                     condition_number = row[0].row-5
