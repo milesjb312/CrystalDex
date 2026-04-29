@@ -50,15 +50,10 @@ import pywinauto.keyboard
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
 server_dir = os.path.dirname(os.path.abspath("Z:"))
-CrystalDex_dir = os.path.join(server_dir,"CrystalDex")
 crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
-server_crystal_pictures = os.path.join(CrystalDex_dir,"Crystal_Pictures")#In the future, the Z: will be determined by the user at installation.
 local_library = os.path.join(script_dir,"CrystalDex_Library.xlsx")
 run_sheet = os.path.join(script_dir,"Run.xlsx")
-CrystalDex_Library = os.path.join(CrystalDex_dir,"CrystalDex_Library.xlsx")
-Crystal_Sendoff = os.path.join(CrystalDex_dir,"Crystal_Sendoff_Sheet.xlsx")
-crystal_screens_path = os.path.join(CrystalDex_dir,"Crystal_Screens.json")
 desktop = os.path.expanduser("~/Desktop")
 
 """DATABASE MANAGEMENT FUNCTIONS"""
@@ -257,7 +252,7 @@ def update_excel():
                 # --- Extract tray-level metadata (first row) ---
                 row = group.iloc[0]
                 group['picture_path'] = group['picture_path'].apply(
-                    lambda x: f'=HYPERLINK("{x}", "Open Image")' if pd.notnull(x) else ""
+                    lambda x: f'=HYPERLINK("{os.path.join(crystal_pictures,x)}", "Open Image")' if pd.notnull(x) else ""
                 )
 
                 date_set = row["date_set"]
@@ -980,6 +975,7 @@ class CrystalDex_main:
             if os.path.exists(file_path):
                 try:
                     picture_path = shutil.move(file_path, crystal_pictures)
+                    picture_path = os.path.basename(picture_path)
                     moved = True
                     break
                 except Exception as e:
