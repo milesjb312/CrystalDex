@@ -139,8 +139,6 @@ def reset_db():
     conn.commit()
     conn.close()
 
-#reset_db()
-
 def get_crystal_screens():
     """Get a list of all crystal screens and their ids."""
     conn = connect_to_db()
@@ -151,6 +149,16 @@ def get_crystal_screens():
         crystal_screens[r[1]] = r[0]
     conn.close()
     return crystal_screens
+
+def get_crystal_screen(tray_id):
+    conn = connect_to_db()
+    cur = conn.cursor()
+    cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(tray_id))
+    crystal_screen_id = cur.fetchone()
+    conn.close()
+    if crystal_screen_id is None:
+        return None
+    return crystal_screen_id[0]
 
 def get_trays(args_dict=None):
     """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
@@ -193,8 +201,7 @@ def get_values(value=None):
             conn.close()
         return values
     except Exception as e:
-        print(f'Database corrupted: {e}. Running reset_db...')
-        reset_db()
+        print(f'Search failed. Database may be corrupted.')
         if value!=None:
             query = f"SELECT DISTINCT {value} FROM crystal_trays"
             cur.execute(query)
@@ -883,16 +890,6 @@ class CrystalDex_main:
         notes = tk.Text(crystal_frame, width = 50, height = 5)
         notes.grid(column=1,row=14+x,columnspan=2)
 
-        def get_crystal_screen():
-            conn = connect_to_db()
-            cur = conn.cursor()
-            cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(self.tray_id,))
-            crystal_screen_id = cur.fetchone()
-            conn.close()
-            if crystal_screen_id is None:
-                return None
-            return crystal_screen_id[0]
-
         def get_condition_number(well_row,well_column):
             return (well_column-1)*8+column_index_from_string(well_row)
 
@@ -900,7 +897,7 @@ class CrystalDex_main:
             print(f'tray_id: {self.tray_id}')
             conn = connect_to_db()
             cur = conn.cursor()
-            crystal_screen = get_crystal_screen()
+            crystal_screen = get_crystal_screen(self.tray_id)
             condition_number = get_condition_number(well_row.get(),int(well_column.get()))
             cur.execute("""SELECT condition FROM conditions WHERE crystal_screen_id = ? AND condition_number = ?""",(crystal_screen,condition_number))
             condition_args = cur.fetchone()
@@ -1104,11 +1101,20 @@ class CrystalDex_main:
         upload_crystal_screen_button.configure(text=f'Upload crystal screen')
 
         def scrape_crystal_screen_data():
-            conn = connect_to_db()
-            cur = conn.cursor()
-            cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
-            conn.commit()
-            conn.close()
+            current_screens = get_crystal_screens()
+            if crystal_screen_name.get() not in current_screens.keys():
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
+                conn.commit()
+                conn.close()
+            else:
+                crystal_screen_id = get_crystal_screen(current_screens[crystal_screen_name.get()])
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(crystal_screen_id))
+                conn.commit()
+                conn.close()
 
             conditions = {}
             crystal_screen_path = filedialog.askopenfilename(
@@ -1202,8 +1208,8 @@ class CrystalDex_main:
         self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
-        self.long_name_entry = None
-        self.two_code_entry = None
+        self.crystal_screen_name = None
+        self.crystal_screen_symbol = None
         self.optimization_conditions = {}
 
         ttk.Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
@@ -1219,7 +1225,17 @@ class CrystalDex_main:
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
-        tk.Button(optimization_screen_frame,text='Continue',command=lambda: optimize(long_name_entry=long_name_entry.get(),two_code_entry=two_code_entry.get())).grid(row=3,column=0)
+        tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
+
+        def add_screen(crystal_screen_name,crystal_screen_symbol):
+            self.crystal_screen_name = crystal_screen_name
+            self.crystal_screen_symbol = crystal_screen_symbol
+            conn = connect_to_db()
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name,crystal_screen_symbol))
+            conn.commit()
+            conn.close()
+            optimize()
 
         def select_reference():
             self.clear_widgets()
@@ -1262,11 +1278,7 @@ class CrystalDex_main:
 
                 tk.Button(optimization_screen_frame,text='Select condition and continue',command=lambda:optimize(selected_condition=selected_condition_var.get())).grid(row=6,column=0,sticky='nwes')
 
-        def optimize(long_name_entry=None,two_code_entry=None,selected_condition=""):
-            if long_name_entry is not None:
-                self.long_name_entry = long_name_entry
-            if two_code_entry is not None:
-                self.two_code_entry = two_code_entry
+        def optimize(selected_condition=""):
             self.clear_widgets()
             self.add_menu()
             self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
@@ -1387,9 +1399,37 @@ class CrystalDex_main:
             conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
             conditions_listbox.grid(row=14,column=0,columnspan=3)
 
+            edited_condition = tk.StringVar()
+            condition_entry = tk.Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
+            condition_entry.grid(row=15, column=0, columnspan=3)
+            selected_index = tk.IntVar(value=-1)
+
+            def select_condition(event):
+                selection = conditions_listbox.curselection()
+                if selection:
+                    index = selection[0]
+                    selected_index.set(index)
+                    edited_condition.set(conditions[index+1])
+
+            conditions_listbox.bind('<<ListboxSelect>>',select_condition)
+
+            def overwrite():
+                index = selected_index.get()
+                print(f'index: {index}')
+                if index >= 0:
+                    text = edited_condition.get()
+                    text = f'{condition+1}) {text}'
+                    condition = index
+                    conditions[condition] = text
+                    conditions.delete(index)
+                    conditions.insert(index, text)
+                    self.optimization_conditions[index] = text
+                    
+            tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=15,column=3)
+
             tk.Button(optimization_screen_frame,text='Add selection to optimization',command=lambda:save_condition_settings(ingredient0_var.get(),ingredient0_start_var.get(),ingredient0_stop_var.get(),ingredient0_weight_percent_var.get(),ingredient0_pH_start_var.get(),ingredient0_pH_stop_var.get(),ingredient0_volume_percent_var.get(),ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get(),ingredient1_pH_start_var.get(),ingredient1_pH_stop_var.get(),ingredient1_volume_percent_var.get(),ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get(),ingredient2_pH_start_var.get(),ingredient2_pH_stop_var.get(),ingredient2_volume_percent_var.get(),ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get(),ingredient3_pH_start_var.get(),ingredient3_pH_stop_var.get(),ingredient3_volume_percent_var.get(),steps=int(steps_var.get()))).grid(row=50,column=0)
 
-            tk.Button(optimization_screen_frame,text='Finish optimization screen',command=lambda:self.startup).grid(row=51,column=0)
+            tk.Button(optimization_screen_frame,text='Finish optimization screen',command=lambda:save_screen()).grid(row=51,column=0)
 
             def save_condition_settings(ingredient0,ingredient0_start,ingredient0_stop,ingredient0_weight_percent,ingredient0_pH_start,ingredient0_pH_stop,ingredient0_volume_percent,
                                         ingredient1,ingredient1_start,ingredient1_stop,ingredient1_weight_percent,ingredient1_pH_start,ingredient1_pH_stop,ingredient1_volume_percent,
@@ -1424,6 +1464,20 @@ class CrystalDex_main:
                 for condition in range(len(self.optimization_conditions)):
                     conditions_listbox.delete(condition)
                     conditions_listbox.insert(condition, self.optimization_conditions[condition])
+
+            def save_screen():
+                crystal_screens = get_crystal_screens()
+                crystal_screen_id = crystal_screens[self.crystal_screen_name]
+                conn = connect_to_db()
+                cur = conn.cursor()
+                for i, condition in enumerate(self.optimization_conditions.values(),start=1):
+                    cur.execute(
+                        "INSERT INTO conditions (crystal_screen_id,condition_number,condition) VALUES (?, ?, ?)",
+                        (crystal_screen_id, i, condition)
+                    )
+                conn.commit()
+                conn.close()
+                self.startup()
 
     def Crystal_Transfer(self):
         self.clear_widgets()
