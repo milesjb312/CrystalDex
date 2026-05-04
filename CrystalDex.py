@@ -49,11 +49,12 @@ import pywinauto.keyboard
 
 #Paths
 script_dir = os.path.dirname(os.path.abspath(__file__))#The directory of this script, so basically the folder where all the code is kept.
-server_dir = os.path.dirname(os.path.abspath("Z:"))
-crystal_pictures = os.path.join(script_dir,'Resources',"Crystal_Pictures")
+server_dir = os.path.join(os.path.abspath("Z:"),"CrystalDex")
+os.makedirs(server_dir,exist_ok=True)
+crystal_pictures = os.path.join(server_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
-local_library = os.path.join(script_dir,"CrystalDex_Library.xlsx")
-run_sheet = os.path.join(script_dir,"Run.xlsx")
+server_library = os.path.join(server_dir,"CrystalDex_Library.xlsx")
+run_sheet = os.path.join(server_dir,"Run.xlsx")
 desktop = os.path.expanduser("~/Desktop")
 
 """DATABASE MANAGEMENT FUNCTIONS"""
@@ -68,7 +69,7 @@ def safe_click(wrapper, coords):
         ctypes.windll.user32.BlockInput(False)
 
 def connect_to_db():
-    return sqlite3.connect(os.path.join(script_dir,"CrystalDex.db"))
+    return sqlite3.connect(os.path.join(server_dir,"CrystalDex.db"))
 
 def reset_db():
     #This is for resetting the database. The method should not be accessed outside development.
@@ -240,7 +241,7 @@ def update_excel():
         FROM crystal_trays t JOIN crystals c ON t.id = c.tray_id""", conn)
     conn.close()
 
-    with pd.ExcelWriter(local_library, engine="openpyxl",mode="w") as writer:
+    with pd.ExcelWriter(server_library, engine="openpyxl",mode="w") as writer:
         if df.empty:
             pd.DataFrame({"info": ["No data available"]}).to_excel(
                 writer,
@@ -1201,11 +1202,9 @@ class CrystalDex_main:
         self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
         optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
         optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
-
-        self.crystal_screen = None
-        conditions = ['' for _ in range(96)]
-        selected_index = tk.IntVar(value=-1)
-        self.quad = 1
+        self.long_name_entry = None
+        self.two_code_entry = None
+        self.optimization_conditions = {}
 
         ttk.Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
         'this is often one of the most defining characteristics of any tray/screen and helps to avoid duplicate names.',justify='left').grid(column=0,row=0,columnspan=2)
@@ -1220,486 +1219,180 @@ class CrystalDex_main:
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
-        tk.Button(optimization_screen_frame,text='Continue',command=lambda: select_type(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
+        tk.Button(optimization_screen_frame,text='Continue',command=lambda: optimize(long_name_entry=long_name_entry.get(),two_code_entry=two_code_entry.get())).grid(row=3,column=0)
 
-        def select_type(long_name,two_code):
-            self.long_name = long_name
-            self.two_code = two_code
+        def select_reference():
             self.clear_widgets()
             self.add_menu()
             self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
             optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
 
-            ttk.Label(optimization_screen_frame,text='Use Make Tray by Hampton and enter your desired condition(s) to generate a list of optimization conditions').grid(column=0,row=0)
-            tk.Button(optimization_screen_frame,text='Go',command=lambda: show_entry_fields(make_tray_copy=True)).grid(row=0,column=1,sticky='nw')
+            crystal_screens = get_crystal_screens()
+            crystal_screens_list = [screen for screen in get_crystal_screens()]
+            crystal_screen = tk.StringVar()
+            crystal_screens_label = ttk.Label(optimization_screen_frame,text='Available screens:')
+            crystal_screens_label.grid(column=0,row=1,sticky='nwes')
+            crystal_screens_combobox = ttk.Combobox(optimization_screen_frame,values=crystal_screens_list,textvariable=crystal_screen,height=5,width=100)
+            crystal_screens_combobox.grid(column=0,row=2,sticky='nwes')
 
-            ttk.Label(optimization_screen_frame,text='Or for complete manual input, look up a reference condition from a screen in CrystalDex').grid(column=0,row=1,sticky='nw')
-            tk.Button(optimization_screen_frame,text='Look up',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=1,column=1,sticky='nw')
+            ttk.Button(optimization_screen_frame,text="Choose Selected Screen",command=lambda: get_conditions(crystal_screen.get())).grid(column=0,row=3,sticky='nwes')
 
-        def show_entry_fields(make_tray_copy):
+            def get_conditions(crystal_screen):
+                crystal_screen_id = crystal_screens[crystal_screen]
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.execute("SELECT condition FROM conditions WHERE crystal_screen_id=?",(crystal_screen_id,))
+                lookup_conditions = [str(row[0]) for row in cur.fetchall()]
+                conn.close()
+                selected_condition_var = tk.StringVar()
+                selected_condition = tk.Entry(optimization_screen_frame,textvariable=selected_condition_var)
+                selected_condition.grid(column=0,row=5,sticky='nwes')
+                lookup_conditions_var = tk.StringVar(value=lookup_conditions)
+                lookup_listbox = tk.Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
+                lookup_listbox.grid(column=0,row=4,sticky='nwes')
+
+                def select_condition_to_optimize(event):
+                    selection = lookup_listbox.curselection()
+                    if selection!=-1:
+                        index = selection[0]
+                        selected_condition_var.set(f'{lookup_conditions[index]}')
+
+                lookup_listbox.bind('<<ListboxSelect>>',select_condition_to_optimize)
+
+                tk.Button(optimization_screen_frame,text='Select condition and continue',command=lambda:optimize(selected_condition=selected_condition_var.get())).grid(row=6,column=0,sticky='nwes')
+
+        def optimize(long_name_entry=None,two_code_entry=None,selected_condition=""):
+            if long_name_entry is not None:
+                self.long_name_entry = long_name_entry
+            if two_code_entry is not None:
+                self.two_code_entry = two_code_entry
             self.clear_widgets()
             self.add_menu()
             self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
             optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
             optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
-            if not make_tray_copy:
-                def choose_ref():
-                    for crystal_screen in self.crystal_screens.keys():
-                        crystal_screen_values = get_trays()
-                        self.crystal_screen_symbols[crystal_screen] = crystal_screen.split('__')[1]
-                        crystal_screens_label = ttk.Label(optimization_screen_frame,text='Available screens:')
-                        crystal_screens_label.grid(row=1,column=0)
-                        crystal_screen_var = tk.StringVar(value=self.crystal_screen_values)
-                        crystal_screens_listbox = tk.Listbox(optimization_screen_frame,listvariable=crystal_screen_var,height=5,width=20)
-                        crystal_screens_listbox.grid(row=2,column=0)
-                    def select_and_continue():
-                        lookup_conditions = []
-                        for condition in self.crystal_screens.get(crystal_screen):
-                            lookup_conditions.append(condition)
-                        lookup_conditions_var = tk.StringVar(value=lookup_conditions)
-                        self.crystal_screen = crystal_screen_var.get()
-                        lookup_listbox = tk.Listbox(optimization_screen_frame,listvariable=lookup_conditions_var,height=20,width=100)
-                        lookup_listbox.grid(row=0,column=1,columnspan=4,rowspan=3)
+            reference_label = ttk.Label(optimization_screen_frame,text=f'Reference condition: {selected_condition}')
+            reference_label.grid(row=0,column=0,sticky='nwes',columnspan=7)
 
-                        def select_condition_to_optimize(event):
-                            selection = lookup_listbox.curselection()
-                            if selection!=-1:
-                                index = selection[0]
-                                print(f'index: {index}')
-                                selected_index.set(index)
-                                self.selected_condition.set(f'{lookup_conditions[index]}')
-                                self.clear_widgets()
-                                self.add_menu()
-                                self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
-                                optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                                optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
-                                show_entry_fields(make_tray_copy=make_tray_copy)
+            tk.Button(optimization_screen_frame,text='Look up new reference',command=lambda: select_reference()).grid(row=1,column=0,sticky='nw')
 
-                        lookup_listbox.bind('<<ListboxSelect>>',select_condition_to_optimize)
+            ttk.Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells. Do not include units in the concentration cells; all units are in molarity or weight percent.").grid(row=6,column=0,columnspan=5,sticky='nw')
+            ttk.Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=7,column=0,columnspan=5,sticky='nwes')
 
-                    tk.Button(optimization_screen_frame,text='Select crystal screen and continue',command=select_and_continue).grid(row=3,column=0)
+            ttk.Label(optimization_screen_frame,text='Steps (optional, default is 1):').grid(row=9,column=0,sticky='e')
+            steps_var = tk.StringVar()
+            steps_entry = tk.Entry(optimization_screen_frame,textvariable=steps_var)
+            steps_entry.grid(row=9,column=1)
 
-                if self.selected_condition.get() =='':
-                    choose_ref()
-                else:
-                    reference_label = ttk.Label(optimization_screen_frame,text=f'Reference condition: {self.selected_condition.get()}')
-                    reference_label.grid(row=0,column=0)
+            ttk.Label(optimization_screen_frame,text='pH Start (leave empty if not tracked):').grid(row=9,column=2)
+            pH_start_var = tk.StringVar()
+            pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var)
+            pH_start_entry.grid(row=9,column=3)
+            ttk.Label(optimization_screen_frame,text='pH Stop:').grid(row=9,column=4)
+            pH_stop_var = tk.StringVar()
+            pH_stop_entry = tk.Entry(optimization_screen_frame,textvariable=pH_stop_var)
+            pH_stop_entry.grid(row=9,column=5)
 
-                    tk.Button(optimization_screen_frame,text='Look up new reference',command=lambda: show_entry_fields(make_tray_copy=False)).grid(row=0,column=1,sticky='nw')
+            ttk.Label(optimization_screen_frame,text='Buffer:').grid(row=10,column=0)
+            buffer_var = tk.StringVar()
+            buffer_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_var)
+            buffer_entry.grid(row=10,column=1)
+            ttk.Label(optimization_screen_frame,text='Buffer Concentration Start (Molar):').grid(row=10,column=2)
+            buffer_start_var = tk.StringVar()
+            buffer_start_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_start_var)
+            buffer_start_entry.grid(row=10,column=3)
+            ttk.Label(optimization_screen_frame,text='Buffer Concentration Stop (normally same as Start):').grid(row=10,column=4)
+            buffer_stop_var = tk.StringVar()
+            buffer_stop_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_stop_var)
+            buffer_stop_entry.grid(row=10,column=5)
+            buffer_weight_percent_var = tk.BooleanVar(value=False)
+            buffer_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
+            buffer_weight_percent_checkbutton.grid(row=10,column=6)
 
-                    ttk.Label(optimization_screen_frame,text="Write a condition and the start, stop, and step concentrations/pH you'd like to iterate that condition over for both the x and y directions. You can populate up to 96 wells. Do not include units in the concentration cells; all units are in molarity or weight percent.").grid(row=5,column=0,columnspan=5,sticky='nw')
-                    ttk.Label(optimization_screen_frame,text='Please enter in the relevant information for each condition. Ensure that the same number of steps will be generated for your pH and condition settings!').grid(row=6,column=0,columnspan=5,sticky='nw')
+            ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=11,column=0)
+            ingredient1_var = tk.StringVar()
+            ingredient1_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_var)
+            ingredient1_entry.grid(row=11,column=1)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=11,column=2)
+            ingredient1_start_var = tk.StringVar()
+            ingredient1_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_start_var)
+            ingredient1_start_entry.grid(row=11,column=3)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=11,column=4)
+            ingredient1_stop_var = tk.StringVar()
+            ingredient1_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_stop_var)
+            ingredient1_stop_entry.grid(row=11,column=5)
+            ingredient1_weight_percent_var = tk.BooleanVar(value=False)
+            ingredient1_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient1_weight_percent_var,offvalue=False,onvalue=True)
+            ingredient1_weight_percent_checkbutton.grid(row=11,column=6)
 
-                    ttk.Label(optimization_screen_frame,text='Steps (optional, default is 1):').grid(row=8,column=0)
-                    steps_var = tk.StringVar()
-                    steps_entry = tk.Entry(optimization_screen_frame,textvariable=steps_var)
-                    steps_entry.grid(row=8,column=1)
+            ttk.Label(optimization_screen_frame,text='Ingredient 2:').grid(row=12,column=0)
+            ingredient2_var = tk.StringVar()
+            ingredient2_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_var)
+            ingredient2_entry.grid(row=12,column=1)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=12,column=2)
+            ingredient2_start_var = tk.StringVar()
+            ingredient2_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_start_var)
+            ingredient2_start_entry.grid(row=12,column=3)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=12,column=4)
+            ingredient2_stop_var = tk.StringVar()
+            ingredient2_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_stop_var)
+            ingredient2_stop_entry.grid(row=12,column=5)
+            ingredient2_weight_percent_var = tk.BooleanVar(value=False)
+            ingredient2_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient2_weight_percent_var,offvalue=False,onvalue=True)
+            ingredient2_weight_percent_checkbutton.grid(row=12,column=6)
 
-                    ttk.Label(optimization_screen_frame,text='pH Start (leave empty if not tracked):').grid(row=8,column=1)
-                    pH_start_var = tk.StringVar()
-                    pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var)
-                    pH_start_entry.grid(row=8,column=2)
-                    ttk.Label(optimization_screen_frame,text='pH Stop:').grid(row=8,column=3)
-                    pH_stop_var = tk.StringVar()
-                    pH_stop_entry = tk.Entry(optimization_screen_frame,textvariable=pH_stop_var)
-                    pH_stop_entry.grid(row=8,column=4)
+            ttk.Label(optimization_screen_frame,text='Ingredient 3:').grid(row=13,column=0)
+            ingredient3_var = tk.StringVar()
+            ingredient3_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_var)
+            ingredient3_entry.grid(row=13,column=1)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=13,column=2)
+            ingredient3_start_var = tk.StringVar()
+            ingredient3_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_start_var)
+            ingredient3_start_entry.grid(row=13,column=3)
+            ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=13,column=4)
+            ingredient3_stop_var = tk.StringVar()
+            ingredient3_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_stop_var)
+            ingredient3_stop_entry.grid(row=13,column=5)
+            ingredient3_weight_percent_var = tk.BooleanVar(value=False)
+            ingredient3_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient3_weight_percent_var,offvalue=False,onvalue=True)
+            ingredient3_weight_percent_checkbutton.grid(row=13,column=6)
+            
+            conditions = ['' for _ in range(96)]
+            conditions_var = tk.StringVar(value=conditions)
+            conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
+            conditions_listbox.grid(row=14,column=0,columnspan=3)
 
-                    ttk.Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
-                    buffer_var = tk.StringVar()
-                    buffer_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_var)
-                    buffer_entry.grid(row=9,column=1)
-                    ttk.Label(optimization_screen_frame,text='Buffer Concentration Start (Molar):').grid(row=9,column=2)
-                    buffer_start_var = tk.StringVar()
-                    buffer_start_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_start_var)
-                    buffer_start_entry.grid(row=9,column=3)
-                    ttk.Label(optimization_screen_frame,text='Buffer Concentration Stop (normally same as Start):').grid(row=9,column=4)
-                    buffer_stop_var = tk.StringVar()
-                    buffer_stop_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_stop_var)
-                    buffer_stop_entry.grid(row=9,column=5)
-                    buffer_weight_percent_var = tk.BooleanVar(value=False)
-                    buffer_weight_percent_checkbutton = tk.Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
-                    buffer_weight_percent_checkbutton.grid(row=9,column=6)
+            tk.Button(optimization_screen_frame,text='Add selection to optimization',command=lambda:save_condition_settings(ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get(),ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get(),ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get(),buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get(),buffer_weight_percent_var.get(),pH_start=float(pH_start_var.get()),pH_stop=float(pH_stop_var.get()),steps=int(steps_var.get()))).grid(row=50,column=0)
 
-                    ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
-                    ingredient1_var = tk.StringVar()
-                    ingredient1_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_var)
-                    ingredient1_entry.grid(row=10,column=1)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=10,column=2)
-                    ingredient1_start_var = tk.StringVar()
-                    ingredient1_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_start_var)
-                    ingredient1_start_entry.grid(row=10,column=3)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=10,column=4)
-                    ingredient1_stop_var = tk.StringVar()
-                    ingredient1_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_stop_var)
-                    ingredient1_stop_entry.grid(row=10,column=5)
+            tk.Button(optimization_screen_frame,text='Finish optimization screen',command=lambda:self.startup).grid(row=51,column=0)
 
-                    ttk.Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
-                    ingredient2_var = tk.StringVar()
-                    ingredient2_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_var)
-                    ingredient2_entry.grid(row=11,column=1)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=11,column=2)
-                    ingredient2_start_var = tk.StringVar()
-                    ingredient2_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_start_var)
-                    ingredient2_start_entry.grid(row=11,column=3)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=11,column=4)
-                    ingredient2_stop_var = tk.StringVar()
-                    ingredient2_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_stop_var)
-                    ingredient2_stop_entry.grid(row=11,column=5)
-
-                    ttk.Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
-                    ingredient3_var = tk.StringVar()
-                    ingredient3_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_var)
-                    ingredient3_entry.grid(row=12,column=1)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Start (Molar):').grid(row=12,column=2)
-                    ingredient3_start_var = tk.StringVar()
-                    ingredient3_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_start_var)
-                    ingredient3_start_entry.grid(row=12,column=3)
-                    ttk.Label(optimization_screen_frame,text='Ingredient Concentration Stop:').grid(row=12,column=4)
-                    ingredient3_stop_var = tk.StringVar()
-                    ingredient3_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_stop_var)
-                    ingredient3_stop_entry.grid(row=12,column=5)
-                    
-                    conditions_var = tk.StringVar(value=conditions)
-                    self.selected_condition = tk.StringVar()
-                    conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
-                    conditions_listbox.grid(row=13,column=0,columnspan=3)
-
-                    new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get()],[buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get(),buffer_weight_percent_var.get()]]
-                    new_conditions = ['' for _ in range(96)]
-
-                    def save_condition_settings():
-                        steps = 1
-                        pH_start = -99
-                        pH_stop = -99
-                        pH_step = 0
-                        if pH_start_var!=-99:
-                            pH_start = float(pH_start_var.get())
-                            if pH_stop_var!=-99:
-                                pH_stop = float(pH_stop_var.get())
-                                if steps_var:
-                                    steps = int(steps_var.get())
-                                    if pH_stop>pH_start:
-                                        pH_step = round((pH_stop-pH_start)/(steps-1),2)
+            def save_condition_settings(ingredient1,ingredient1_start,ingredient1_stop,ingredient1_weight_percent,ingredient2,ingredient2_start,ingredient2_stop,ingredient2_weight_percent,ingredient3,ingredient3_start,ingredient3_stop,ingredient3_weight_percent,buffer,buffer_start,buffer_stop,buffer_weight_percent,pH_start=-99,pH_stop=-99,steps=1):
+                condition_instructions = [[ingredient1,ingredient1_start,ingredient1_stop,ingredient1_weight_percent],[ingredient2,ingredient2_start,ingredient2_stop,ingredient2_weight_percent],[ingredient3,ingredient3_start,ingredient3_stop,ingredient3_weight_percent],[buffer,buffer_start,buffer_stop,buffer_weight_percent]]
+                if pH_stop==-99:
+                    messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
+                    return
+                pH_step = round((pH_stop-pH_start)/(steps-1),2)
+                current_condition_number = len(self.optimization_conditions)
+                for condition_number in range(current_condition_number,current_condition_number+steps+1):
+                    for condition in condition_instructions:
+                        self.optimization_conditions[condition_number] = ""
+                        if '' not in condition:
+                            new_ingredient_id = condition[0]
+                            new_condition_start = float(condition[1])
+                            new_condition_stop = float(condition[2])
+                            new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
+                            new_condition_concentration = condition_number*new_condition_step+new_condition_start
+                            if not condition[3]:
+                                self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f'{new_condition_concentration} M {new_ingredient_id}, '
                             else:
-                                messagebox.showerror(title='No pH Stop',message=f"Please enter a pH Stop. This is the pH you'd like your current set of conditions to end at.")
+                                self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f'{new_condition_concentration} % {new_ingredient_id}'
+                    if pH_start!=-99:
+                        self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number] + f'pH {condition_number*pH_step+pH_start}'
 
-                        for new_condition_number in range(steps):
-                            for new_ingredient in new_condition_instructions:
-                                if '' not in [new_ingredient[0],new_ingredient[1],new_ingredient[2]]:
-                                    new_ingredient_id = new_ingredient[0]
-                                    new_condition_start = float(new_ingredient[1])
-                                    new_condition_stop = float(new_ingredient[2])
-                                    new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
-                                    new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
-                                    if not new_ingredient[3]:
-                                        new_conditions[new_condition_number] += f'{new_condition_concentration} M {new_ingredient_id}, '
-                                    else:
-                                        new_conditions[new_condition_number] += f'{new_condition_concentration} % {new_ingredient_id}'
-                            if pH_start!=-99:
-                                new_conditions[new_condition_number] += f'pH {new_condition_number*pH_step+pH_start}'
-
-                        for condition in range(len(conditions)):
-                            if len(new_conditions)>0:
-                                if conditions[condition] == '':
-                                    conditions[condition] = f'{condition+1}. {new_conditions.pop(0)}'
-                                    conditions_listbox.delete(condition)
-                                    conditions_listbox.insert(condition, conditions[condition])
-                    
-                    tk.Button(optimization_screen_frame,text='Add selection to optimization',command=save_condition_settings).grid(row=50,column=0)
-
-                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=self.startup).grid(row=51,column=0)
-
-            elif make_tray_copy:
-                w = 8
-                past_vars = {}
-                link = 'https://hamptonresearch.com/make-tray.php'
-                webbrowser.get('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe %s').open(link)
-                time.sleep(1)
-                self.root.after_idle(self.refocus)
-                self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
-                optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                optimization_screen_frame.grid(column=0,row=0,sticky='nwes')#the full sticky means this fills the master frame.
-                ttk.Label(optimization_screen_frame,text="Copy the conditions seen in Make Tray as well as possible. Do not include units in the concentration cells; all units are in molarity or weight percent.").grid(row=5,column=0,columnspan=5,sticky='nw')
-                ttk.Label(optimization_screen_frame,text='Lowest pH (leave empty if not tracked):').grid(row=8,column=1)
-                pH_start_var = tk.StringVar()
-                pH_start_entry = tk.Entry(optimization_screen_frame,textvariable=pH_start_var,width=w)
-                pH_start_entry.grid(row=8,column=2)
-                ttk.Label(optimization_screen_frame,text='Highest pH:').grid(row=8,column=3)
-                pH_stop_var = tk.StringVar()
-                pH_stop_entry = tk.Entry(optimization_screen_frame,textvariable=pH_stop_var,width=w)
-                pH_stop_entry.grid(row=8,column=4)
-
-                ttk.Label(optimization_screen_frame,text='Buffer:').grid(row=9,column=0)
-                buffer_var = tk.StringVar()
-                buffer_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_var)
-                buffer_entry.grid(row=9,column=1)
-                ttk.Label(optimization_screen_frame,text='Lowest Buffer Concentration:').grid(row=9,column=2)
-                buffer_start_var = tk.StringVar()
-                buffer_start_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_start_var,width=w)
-                buffer_start_entry.grid(row=9,column=3)
-                ttk.Label(optimization_screen_frame,text='Highest Buffer Concentration (normally same as lowest):').grid(row=9,column=4)
-                buffer_stop_var = tk.StringVar()
-                buffer_stop_entry = tk.Entry(optimization_screen_frame,textvariable=buffer_stop_var,width=w)
-                buffer_stop_entry.grid(row=9,column=5)
-                buffer_weight_percent_var = tk.BooleanVar(value=False)
-                buffer_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=buffer_weight_percent_var,onvalue=True,offvalue=False)
-                buffer_weight_percent_checkbutton.grid(row=9,column=6)
-
-                ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=10,column=0)
-                ingredient1_var = tk.StringVar()
-                ingredient1_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_var)
-                ingredient1_entry.grid(row=10,column=1)
-                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=10,column=2)
-                ingredient1_start_var = tk.StringVar()
-                ingredient1_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_start_var,width=w)
-                ingredient1_start_entry.grid(row=10,column=3)
-                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=10,column=4)
-                ingredient1_stop_var = tk.StringVar()
-                ingredient1_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient1_stop_var,width=w)
-                ingredient1_stop_entry.grid(row=10,column=5)
-                ingredient1_weight_percent_var = tk.BooleanVar(value=False)
-                ingredient1_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient1_weight_percent_var,offvalue=False,onvalue=True)
-                ingredient1_weight_percent_checkbutton.grid(row=10,column=7)
-
-                ttk.Label(optimization_screen_frame,text='Ingredient 2:').grid(row=11,column=0)
-                ingredient2_var = tk.StringVar()
-                ingredient2_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_var)
-                ingredient2_entry.grid(row=11,column=1)
-                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=11,column=2)
-                ingredient2_start_var = tk.StringVar()
-                ingredient2_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_start_var,width=w)
-                ingredient2_start_entry.grid(row=11,column=3)
-                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=11,column=4)
-                ingredient2_stop_var = tk.StringVar()
-                ingredient2_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient2_stop_var,width=w)
-                ingredient2_stop_entry.grid(row=11,column=5)
-                ingredient2_weight_percent_var = tk.BooleanVar(value=False)
-                ingredient2_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient2_weight_percent_var,offvalue=False,onvalue=True)
-                ingredient2_weight_percent_checkbutton.grid(row=11,column=7)
-
-                ttk.Label(optimization_screen_frame,text='Ingredient 3:').grid(row=12,column=0)
-                ingredient3_var = tk.StringVar()
-                ingredient3_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_var)
-                ingredient3_entry.grid(row=12,column=1)
-                ttk.Label(optimization_screen_frame,text='Ingredient Lowest Concentration:').grid(row=12,column=2)
-                ingredient3_start_var = tk.StringVar()
-                ingredient3_start_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_start_var,width=w)
-                ingredient3_start_entry.grid(row=12,column=3)
-                ttk.Label(optimization_screen_frame,text='Ingredient Highest Concentration:').grid(row=12,column=4)
-                ingredient3_stop_var = tk.StringVar()
-                ingredient3_stop_entry = tk.Entry(optimization_screen_frame,textvariable=ingredient3_stop_var,width=w)
-                ingredient3_stop_entry.grid(row=12,column=5)
-                ingredient3_weight_percent_var = tk.BooleanVar(value=False)
-                ingredient3_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient3_weight_percent_var,offvalue=False,onvalue=True)
-                ingredient3_weight_percent_checkbutton.grid(row=12,column=7)
-                
-                ttk.Label(optimization_screen_frame,text='Virtual Crystal Screen').grid(row=14,column=2,sticky='we')
-                vcs = tk.Frame(optimization_screen_frame,width=600,height=400,relief='raised',background='white',border=4,highlightcolor='white')
-                vcs.grid(row=15,column=1,columnspan=6)
-                quad1 = tk.Frame(vcs,width=300,height=200,borderwidth=2,background='blue')
-                quad1.grid(row=0,column=0)
-                quad2 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
-                quad2.grid(row=1,column=0)
-                quad3 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
-                quad3.grid(row=0,column=1)
-                quad4 = tk.Frame(vcs,width=300,height=200,borderwidth=2)
-                quad4.grid(row=1,column=1)
-
-                new_conditions = ['' for _ in range(96)]
-                self.condition = -1
-
-                def restore_condition_settings():
-                    pH_start_var.set(past_vars["pH_start_var"])                    
-                    pH_stop_var.set(past_vars["pH_stop_var"])
-                    buffer_var.set(past_vars["buffer_var"])
-                    buffer_start_var.set(past_vars["buffer_start_var"])
-                    buffer_stop_var.set(past_vars['buffer_stop_var'])
-                    buffer_weight_percent_var.set(past_vars['buffer_weight_percent_var'])
-                    ingredient1_var.set(past_vars['ingredient1_var'])
-                    ingredient1_start_var.set(past_vars['ingredient1_start_var'])
-                    ingredient1_stop_var.set(past_vars['ingredient1_stop_var'])
-                    ingredient1_weight_percent_var.set(past_vars['ingredient1_weight_percent_var'])
-                    ingredient2_var.set(past_vars['ingredient2_var'])
-                    ingredient2_start_var.set(past_vars['ingredient2_start_var'])
-                    ingredient2_stop_var.set(past_vars['ingredient2_stop_var'])
-                    ingredient2_weight_percent_var.set(past_vars['ingredient2_weight_percent_var'])
-                    ingredient3_var.set(past_vars['ingredient3_var'])
-                    ingredient3_start_var.set(past_vars['ingredient3_start_var'])
-                    ingredient3_stop_var.set(past_vars['ingredient3_stop_var'])
-                    ingredient3_weight_percent_var.set(past_vars['ingredient3_weight_percent_var'])
-
-                def save_condition_settings():                        
-                    if self.quad == 1:
-                        self.quad = 2
-                        quad1.configure(background='gray')
-                        quad2.configure(background='blue')
-                    elif self.quad ==2:
-                        self.quad = 3
-                        quad2.configure(background='gray')
-                        quad3.configure(background='blue')
-                    elif self.quad ==3:
-                        self.quad = 4
-                        quad3.configure(background='gray')
-                        quad4.configure(background='blue')
-                    elif self.quad == 4:
-                        self.quad = 5
-
-                    steps = 6
-                    pH_start = -99
-                    pH_stop = -99
-                    pH_step = 0
-                    pH_steps = 4
-                    if pH_start_var.get() !='':
-                        pH_start = float(pH_start_var.get())
-                        if pH_stop_var.get()!='':
-                            pH_stop = float(pH_stop_var.get())
-                            if pH_stop>pH_start:
-                                pH_step = round((pH_stop-pH_start)/(pH_steps-1),2)
-                        else:
-                            messagebox.showerror(title='No pH Stop',message=f"Please enter a highest pH.")
-
-                    new_condition_instructions = [[ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get()],[ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get()],[ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get()],[buffer_var.get(),buffer_start_var.get(),buffer_stop_var.get(),buffer_weight_percent_var.get()]]
-                    for new_condition_number in range(steps):
-                        for new_pH_number in range(pH_steps):
-                            self.condition = self.condition+1
-                            for new_ingredient in new_condition_instructions:
-                                if '' not in [new_ingredient[0],new_ingredient[1],new_ingredient[2]]:
-                                    new_ingredient_id = new_ingredient[0]
-                                    new_condition_start = float(new_ingredient[1])
-                                    new_condition_stop = float(new_ingredient[2])
-                                    new_condition_step = round((new_condition_stop-new_condition_start)/(steps-1),2)
-                                    new_condition_concentration = new_condition_number*new_condition_step+new_condition_start
-                                    if not new_ingredient[3]:#if not measured by weight percent:
-                                        new_conditions[self.condition] += f'{new_condition_concentration} M {new_ingredient_id}, '
-                                    else:
-                                        new_conditions[self.condition] += f'{new_condition_concentration} % {new_ingredient_id}, '
-                            if pH_start != -99:
-                                new_conditions[self.condition] += f'pH {new_pH_number*pH_step+pH_start}'
-                            
-                    if self.quad == 5:
-                        quads = [[],[],[],[]]
-                        condition = -1
-                        for quad in range(len(quads)):
-                            for _ in range(len(conditions)//4):
-                                condition += 1
-                                quads[quad].append(new_conditions[condition])
-                                
-                        for step in range(steps):
-                            for quad in range(4):
-                                for pH_step in range(4):
-                                    if quad == 0:
-                                        conditions[step*8+pH_step] = quads[quad][step*4+pH_step]
-                                    elif quad ==1:
-                                        conditions[step*8+pH_step+4] = quads[quad][step*4+pH_step]
-                                    elif quad ==2:
-                                        conditions[step*8+pH_step+48] = quads[quad][step*4+pH_step]
-                                    elif quad ==3:
-                                        conditions[step*8+pH_step+52] = quads[quad][step*4+pH_step]
-                        review_make_tray_copy()
-
-                    past_vars["pH_start_var"] = pH_start_var.get()
-                    pH_start_var.set("")
-                    past_vars["pH_stop_var"] = pH_stop_var.get()
-                    pH_stop_var.set("")
-                    past_vars["buffer_var"] = buffer_var.get()
-                    buffer_var.set("")
-                    past_vars["buffer_start_var"] = buffer_start_var.get()
-                    buffer_start_var.set("")
-                    past_vars['buffer_stop_var'] = buffer_stop_var.get()
-                    buffer_stop_var.set("")
-                    past_vars['buffer_weight_percent_var'] = buffer_weight_percent_var.get()
-                    buffer_weight_percent_var.set(False)
-                    past_vars['ingredient1_var'] = ingredient1_var.get()
-                    ingredient1_var.set("")
-                    past_vars['ingredient1_start_var'] = ingredient1_start_var.get()
-                    ingredient1_start_var.set("")
-                    past_vars['ingredient1_stop_var'] = ingredient1_stop_var.get()
-                    ingredient1_stop_var.set("")
-                    past_vars['ingredient1_weight_percent_var'] = ingredient1_weight_percent_var.get()
-                    ingredient1_weight_percent_var.set(False)
-                    past_vars['ingredient2_var'] = ingredient2_var.get()
-                    ingredient2_var.set("")
-                    past_vars['ingredient2_start_var'] = ingredient2_start_var.get()
-                    ingredient2_start_var.set("")
-                    past_vars['ingredient2_stop_var'] = ingredient2_stop_var.get()
-                    ingredient2_stop_var.set("")
-                    past_vars['ingredient2_weight_percent_var'] = ingredient2_weight_percent_var.get()
-                    ingredient2_weight_percent_var.set(False)
-                    past_vars['ingredient3_var'] = ingredient3_var.get()
-                    ingredient3_var.set("")
-                    past_vars['ingredient3_start_var'] = ingredient3_start_var.get()
-                    ingredient3_start_var.set("")
-                    past_vars['ingredient3_stop_var'] = ingredient3_stop_var.get()
-                    ingredient3_stop_var.set("")
-                    past_vars['ingredient3_weight_percent_var'] = ingredient3_weight_percent_var.get()
-                    ingredient3_weight_percent_var.set(False)
-
-                save_condition_settings_button = tk.Button(optimization_screen_frame,text='Add selection \nto optimization',command=save_condition_settings)
-                save_condition_settings_button.grid(row=13,column=0)
-                restore_condition_settings_button = tk.Button(optimization_screen_frame,text='Copy last conditions',command=restore_condition_settings)
-                restore_condition_settings_button.grid(row=14,column=0)
-
-                def review_make_tray_copy():
-                    self.clear_widgets()
-                    self.add_menu()
-                    self.root.geometry(f'{self.screen_width}x{self.screen_height}+0+0')
-                    optimization_screen_frame = ttk.Frame(self.root,padding="3 3 12 12")
-                    optimization_screen_frame.grid(column=0,row=0,sticky='nwes')
-
-                    listbox_label = ttk.Label(optimization_screen_frame,text='Review and correct generated conditions:')
-                    listbox_label.grid(row=2,column=0)
-                    listbox_values = [f"[{condition+1}]: {conditions[condition]}" for condition in range(len(conditions))]
-                    condition_var = tk.StringVar(value=listbox_values)
-                    conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=condition_var,height=25,width=150)
-                    conditions_listbox.grid(row=3,column=0,columnspan=3)
-                    
-                    edited_condition = tk.StringVar()
-                    condition_entry = tk.Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
-                    condition_entry.grid(row=4, column=0, columnspan=3)
-
-                    selected_index = tk.IntVar(value=-1)
-
-                    def select_condition(event):
-                        selection = conditions_listbox.curselection()
-                        if selection:
-                            index = selection[0]
-                            selected_index.set(index)
-                            edited_condition.set(f'{conditions[index]}')
-
-                    conditions_listbox.bind('<<ListboxSelect>>',select_condition)
-
-                    def overwrite():
-                        index = selected_index.get()
-                        #print(f'index: {index}')
-                        if index >= 0:
-                            text = edited_condition.get()
-                            condition = index
-                            conditions[condition] = text
-                            conditions_listbox.delete(index)
-                            conditions_listbox.insert(index, f'[{condition+1}]: {text}')
-                            selected_index.set(index+1)
-                            if index !=95:
-                                edited_condition.set(f'{conditions[index+1]}')
-                            else:
-                                edited_condition.set(f'{conditions[0]}')
-                            
-                    tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
-
-                    def save_screens():
-                        screen_id = self.add_crystal_screen(long_name.get())#this both creates the crystal_screen and provides the id
-                        conn = connect_to_db()
-                        cur = conn.cursor()
-                        for i, condition in enumerate(conditions.values(),start=1):
-                            cur.execute(
-                                "INSERT INTO conditions (screen_id,condition_number,condition) VALUES (?, ?, ?)",
-                                (screen_id, i, condition)
-                            )
-                        conn.commit()
-                        conn.close()
-                        self.startup()
-
-                    tk.Button(optimization_screen_frame,text='Finish optimization screen',command=save_screens).grid(row=5,column=3)
+                for condition in range(len(self.optimization_conditions)):
+                    conditions_listbox.delete(condition)
+                    conditions_listbox.insert(condition, self.optimization_conditions[condition])
 
     def Crystal_Transfer(self):
         self.clear_widgets()
