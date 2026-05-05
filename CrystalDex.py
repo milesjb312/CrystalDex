@@ -120,7 +120,7 @@ def reset_db():
                 conditions TEXT NOT NULL,
                 minor_axis REAL,
                 major_axis REAL,
-                number_of_crystals INT,
+                number_of_crystals INT NOT NULL,
                 shape TEXT,
                 possible_salt_crystals TEXT NOT NULL,
                 precipitation TEXT NOT NULL,
@@ -147,7 +147,7 @@ def get_runs():
     cur = conn.cursor()
     query = f"SELECT DISTINCT run FROM crystals"
     cur.execute(query)
-    runs = [row[0] for row in cur.fetchall()]
+    runs = [int(row[0]) for row in cur.fetchall()]
     conn.close()
     return runs
 
@@ -200,6 +200,16 @@ def get_trays(args_dict=None):
 
     trays = [(", ".join(str(item) for item in row)) for row in rows]
     return trays
+
+def get_vials_and_ports(run):
+    conn = connect_to_db()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    query = f"SELECT vial, port, notes FROM crystals WHERE run=?"
+    cur.execute(query,(run,))
+    vials_and_ports = {row[0]:row[1] for row in cur.fetchall()}
+    conn.close()
+    return vials_and_ports
 
 def get_values(value=None):
     """Later on, this will act as the filter by python-based filtering of the trays grabbed from the database."""
@@ -745,13 +755,16 @@ class CrystalDex_main:
             st_name_combobox.grid(column=0,row=5,sticky='ew')
 
             if method=="harvesting":
-                run = tk.StringVar()
-                run_label = ttk.Label(old_tray_frame,text=('What is the current Beamline Run?'))
+                run_label = ttk.Label(old_tray_frame,text='Beamline Run:')
                 run_label.grid(column=0,row=6)
-                runs = [0]
-                run_drop_down = ttk.Combobox(old_tray_frame,textvariable=run,values=runs)
-                run_drop_down.grid(column=0,row=7)
-                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),run.get())).grid(column=0,row=8)
+                runs = get_runs()
+                if len(runs)>0:
+                    ttk.Label(old_tray_frame,text=f'{max(runs)}').grid(column=0,row=7)
+                    tk.Button(old_tray_frame,text="Harvest from Selected Tray for Current Beamline Run",command=lambda: select_old_tray(tray_var.get(),max(runs))).grid(column=0,row=8)
+                    tk.Button(old_tray_frame,text="Start a new run and Harvest from Selected Tray",command=lambda: select_old_tray(tray_var.get(),max(runs)+1)).grid(column=0,row=9)
+                else:
+                    ttk.Label(old_tray_frame,text="0").grid(column=0,row=7)
+                    tk.Button(old_tray_frame,text="Start a new run and Harvest from Selected Tray",command=lambda: select_old_tray(tray_var.get(),1)).grid(column=0,row=9)
             else:
                 tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
 
@@ -1547,20 +1560,9 @@ class CrystalDex_main:
             messagebox.showerror(title="No Runs!",message="You can't transfer; you don't have any runs.")
             self.startup()
             return
-        run = tk.StringVar()
         ttk.Label(crystal_transfer_frame,text=f"Current run: {max(runs)}").grid(column=1,row=1)
-        ttk.Button(crystal_transfer_frame,text="Transfer crystals in current run",command=lambda:transfer(int(run.get()),method='current')).grid(column=1,row=2)
+        ttk.Button(crystal_transfer_frame,text="Transfer crystals in current run",command=lambda:transfer(max(runs),method='current')).grid(column=1,row=2)
         ttk.Button(crystal_transfer_frame,text="Transfer crystals from an old run to the current run",command=lambda:transfer(method='old')).grid(column=1,row=4)
-
-        def get_vials_and_ports(run):
-            conn = connect_to_db()
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            query = f"SELECT vial, port FROM crystals WHERE run=?"
-            cur.execute(query,(run,))
-            vials_and_ports = {row[0]:row[1] for row in cur.fetchall()}
-            conn.close()
-            return vials_and_ports
 
         def transfer(run=None,method=None):
             self.clear_widgets()
@@ -1570,9 +1572,11 @@ class CrystalDex_main:
             transfer_frame.grid(column=0,row=0,sticky='nw')
 
             if run==None:
-                ttk.Label(crystal_transfer_frame, text="Select the old run to transfer crystals from:").grid(column=1,row=1)
-                ttk.Combobox(crystal_transfer_frame,values=runs,textvariable=run).grid(column=1,row=2)
-                transfer(run,method='old')
+                run = tk.StringVar()
+                ttk.Label(transfer_frame, text="Select the old run to transfer crystals from:").grid(column=1,row=1)
+                ttk.Combobox(transfer_frame,values=runs,textvariable=run).grid(column=1,row=2)
+                tk.Button(transfer_frame,text="Transfer from selected tray",command=lambda:transfer(int(run.get()),method='old')).grid(column=1,row=3)
+                return
 
             wi = 0
             if method=="current":
@@ -1581,30 +1585,40 @@ class CrystalDex_main:
                 wi = 500
 
             vials_and_ports = get_vials_and_ports(run)
+            transfer_tree=None
 
-            transfer_tree = ttk.Treeview(
-                transfer_frame,
-                columns=("vial", "port"),
-                show="headings",
-                height=25
-            )
+            if method=="current":
+                transfer_tree = ttk.Treeview(
+                    transfer_frame,
+                    columns=("vial", "port"),
+                    show="headings",
+                    height=25
+                )
 
-            transfer_tree.heading("vial", text="Vial")
-            transfer_tree.heading("port", text="Port")
-            transfer_tree.column("vial", width=wi)
-            transfer_tree.column("port", width=wi)
+                transfer_tree.heading("vial", text="Vial")
+                transfer_tree.heading("port", text="Port")
+                transfer_tree.column("vial", width=wi)
+                transfer_tree.column("port", width=wi)
 
-            if method=="old":
+            elif method=="old":
+                transfer_tree = ttk.Treeview(
+                    transfer_frame,
+                    columns=("vial", "transfer_b"),
+                    show="headings",
+                    height=25
+                )
+                transfer_tree.heading("vial", text="Vial")
                 transfer_tree.heading("transfer_b",text="Transfer to current run?")
+                transfer_tree.column("vial", width=wi)
                 transfer_tree.column("transfer_b",width=wi)
 
             transfer_tree.grid(row=0, column=0)
 
-            for vial, port in vials_and_ports.items():
+            for vial, port, notes in vials_and_ports.items():
                 if method=="current":
                     transfer_tree.insert("","end",values=(vial,port))
                 elif method=="old":
-                    transfer_tree.insert("","end",values=(vial,port,False))
+                    transfer_tree.insert("","end",values=(vial,"False"))
             scrollbar = ttk.Scrollbar(transfer_frame, orient="vertical",command=transfer_tree.yview)
             transfer_tree.configure(yscrollcommand=scrollbar.set)
             scrollbar.grid(row=0,column=1,sticky="ns")
@@ -1635,13 +1649,16 @@ class CrystalDex_main:
                     if not selected:
                         return
                     item = selected[0]
-                    x, y, width, height = transfer_tree.bbox(item, "#3")
-                    transfer_b = tk.BooleanVar()
-                    entry = ttk.Checkbutton(transfer_tree,variable=transfer_b,onvalue=True,offvalue=False)
+                    x, y, width, height = transfer_tree.bbox(item, "#2")
+                    transfer_b = tk.BooleanVar(value=False)
+                    entry = ttk.Checkbutton(transfer_tree,variable=transfer_b,offvalue=False,onvalue=True)
                     entry.place(x=x, y=y, width=width, height=height)
                     entry.focus()
                     def save_edit(event=None):
-                        transfer_tree.set(item, "transfer_b", entry.get())
+                        if transfer_b.get()==0:
+                            transfer_tree.set(item, "transfer_b", "False")
+                        elif transfer_b.get()==1:
+                            transfer_tree.set(item, "transfer_b", "True")
                         entry.destroy()
                     entry.bind("<Return>", save_edit)
                     entry.bind("<FocusOut>", save_edit)
@@ -1670,11 +1687,12 @@ class CrystalDex_main:
                 updates = []
                 for item in transfer_tree.get_children():
                     vial, transfer_b = transfer_tree.item(item, "values")
-                    updates.append((port, run, int(vial)))
+                    if transfer_b=="True":
+                        updates.append((max(runs), run, int(vial)))
                 print(f'updates: {updates}')
                 conn = connect_to_db()
                 cur = conn.cursor()
-                cur.executemany("""UPDATE crystals SET port=?, run=? WHERE run=? AND vial=?""",updates)
+                cur.executemany("""UPDATE crystals SET run=? WHERE run=? AND vial=?""",updates)
                 conn.commit()
                 conn.close()
                 self.run_sheet(run)
