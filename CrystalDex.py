@@ -139,6 +139,8 @@ def reset_db():
     conn.commit()
     conn.close()
 
+#reset_db()
+
 def get_crystal_screens():
     """Get a list of all crystal screens and their ids."""
     conn = connect_to_db()
@@ -412,7 +414,7 @@ class CrystalDex_main:
         tk.Button(startup,text='Update Tray',command=lambda: self.Index_Tray("old"),width=40).grid(column=1,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Harvest Crystals',command=lambda: self.Index_Tray("harvesting"),width=40).grid(column=2,row=0,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text="Upload or Edit Crystal Screen",command=self.Upload_Crystal_Screen,width=40).grid(column=3,row=0,padx=50,pady=50,sticky='nesw')
-        tk.Button(startup,text='Design and Upload Optimization Screen',command=self.Optimization_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='nesw')
+        tk.Button(startup,text='Design and Upload Custom Screen',command=self.Custom_Screen,width=40).grid(column=0,row=1,padx=50,pady=50,sticky='nesw')
         tk.Button(startup,text='Transfer Crystals',command=self.Crystal_Transfer,width=40).grid(column=1,row=1,padx=50,pady=50,sticky='nesw')
 
     def load_SeBaView(self):
@@ -1109,10 +1111,11 @@ class CrystalDex_main:
                 conn.commit()
                 conn.close()
             else:
-                crystal_screen_id = get_crystal_screen(current_screens[crystal_screen_name.get()])
+                crystal_screen_id = current_screens[crystal_screen_name.get()]
                 conn = connect_to_db()
                 cur = conn.cursor()
-                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(crystal_screen_id))
+                print(f'crystal_screen_id: {crystal_screen_id} type: {type(crystal_screen_id)}')
+                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(str(crystal_screen_id)))
                 conn.commit()
                 conn.close()
 
@@ -1156,31 +1159,21 @@ class CrystalDex_main:
             condition_entry = tk.Entry(upload_crystal_screen_frame, textvariable=edited_condition, width=150)
             condition_entry.grid(row=4, column=0, columnspan=3)
 
-            selected_index = tk.IntVar(value=-1)
-
+            self.index = None
             def select_condition(event):
                 selection = conditions_listbox.curselection()
                 if selection:
-                    index = selection[0]
-                    selected_index.set(index)
-                    edited_condition.set(f'{conditions[index+1]}')
+                    edited_condition.set(f'{conditions[selection[0]+1]}')
+                    self.index = selection[0]
 
             conditions_listbox.bind('<<ListboxSelect>>',select_condition)
 
             def overwrite():
-                index = selected_index.get()
-                print(f'index: {index}')
-                if index >= 0:
+                if self.index:
                     text = edited_condition.get()
-                    condition = index
-                    conditions[condition] = text
-                    conditions_listbox.delete(index)
-                    conditions_listbox.insert(index, f'[{condition+1}]: {text}')
-                    selected_index.set(index+1)
-                    if index !=95:
-                        edited_condition.set(f'{conditions[index+1]}')
-                    else:
-                        edited_condition.set(f'{conditions[0]}')
+                    conditions[self.index-1] = text
+                    conditions_listbox.delete(self.index)
+                    conditions_listbox.insert(self.index, f'{self.index+1} {text}')
                     
             tk.Button(upload_crystal_screen_frame,text='overwrite',command=overwrite).grid(row=4,column=3)
             def save_screens():
@@ -1199,8 +1192,8 @@ class CrystalDex_main:
                 
             tk.Button(upload_crystal_screen_frame,text='Save and finish',command=save_screens).grid(row=5,column=2)
 
-    def Optimization_Screen(self):
-        """Allows users to either create a custom optimization screen (while optionally looking up a reference condition from any of the screens
+    def Custom_Screen(self):
+        """Allows users to either create a custom screen (while optionally looking up a reference condition from any of the screens
         currently in CrystalDex) or to copy information (by hand) from a reference sheet made by Hampton's Make Tray. NOTE: This will not work 
         for any Make Tray optimizations that have conditions that are optimized in a non-linear manner."""
         self.clear_widgets()
@@ -1212,15 +1205,15 @@ class CrystalDex_main:
         self.crystal_screen_symbol = None
         self.optimization_conditions = {}
 
-        ttk.Label(optimization_screen_frame,text='Fill out the following to name your optimization screen. Be advised that CrystalDex appends the date to each optimization screen as\n' \
+        ttk.Label(optimization_screen_frame,text='Fill out the following to name your custom screen. Be advised that CrystalDex appends the date to each custom screen as\n' \
         'this is often one of the most defining characteristics of any tray/screen and helps to avoid duplicate names.',justify='left').grid(column=0,row=0,columnspan=2)
 
-        ttk.Label(optimization_screen_frame,text='Complete name of new optimization screen:').grid(row=1,column=0)
+        ttk.Label(optimization_screen_frame,text='Complete name of new custom screen:').grid(row=1,column=0)
         long_name = tk.StringVar()
         long_name_entry = tk.Entry(optimization_screen_frame,textvariable=long_name)
         long_name_entry.grid(row=1,column=1)
 
-        ttk.Label(optimization_screen_frame,text='Two-character code for optimization screen:').grid(row=2,column=0)
+        ttk.Label(optimization_screen_frame,text='Two-character code for custom screen:').grid(row=2,column=0)
         two_code = tk.StringVar()
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
@@ -1228,14 +1221,21 @@ class CrystalDex_main:
         tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
 
         def add_screen(crystal_screen_name,crystal_screen_symbol):
-            self.crystal_screen_name = crystal_screen_name
-            self.crystal_screen_symbol = crystal_screen_symbol
-            conn = connect_to_db()
-            cur = conn.cursor()
-            cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name,crystal_screen_symbol))
-            conn.commit()
-            conn.close()
-            optimize()
+            current_screens = get_crystal_screens()
+            if crystal_screen_name.get() not in current_screens.keys():
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
+                conn.commit()
+                conn.close()
+            else:
+                crystal_screen_id = current_screens[crystal_screen_name.get()]
+                conn = connect_to_db()
+                cur = conn.cursor()
+                print(f'crystal_screen_id: {crystal_screen_id} type: {type(crystal_screen_id)}')
+                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(str(crystal_screen_id)))
+                conn.commit()
+                conn.close()
 
         def select_reference():
             self.clear_widgets()
@@ -1402,34 +1402,28 @@ class CrystalDex_main:
             edited_condition = tk.StringVar()
             condition_entry = tk.Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
             condition_entry.grid(row=15, column=0, columnspan=3)
-            selected_index = tk.IntVar(value=-1)
 
+            self.index = None
             def select_condition(event):
                 selection = conditions_listbox.curselection()
                 if selection:
-                    index = selection[0]
-                    selected_index.set(index)
-                    edited_condition.set(conditions[index+1])
+                    edited_condition.set(f'{conditions[selection[0]+1]}')
+                    self.index = selection[0]
 
             conditions_listbox.bind('<<ListboxSelect>>',select_condition)
 
             def overwrite():
-                index = selected_index.get()
-                print(f'index: {index}')
-                if index >= 0:
+                if self.index:
                     text = edited_condition.get()
-                    text = f'{condition+1}) {text}'
-                    condition = index
-                    conditions[condition] = text
-                    conditions.delete(index)
-                    conditions.insert(index, text)
-                    self.optimization_conditions[index] = text
+                    conditions[self.index-1] = text
+                    conditions_listbox.delete(self.index)
+                    conditions_listbox.insert(self.index, f'{self.index+1} {text}')
                     
             tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=15,column=3)
 
-            tk.Button(optimization_screen_frame,text='Add selection to optimization',command=lambda:save_condition_settings(ingredient0_var.get(),ingredient0_start_var.get(),ingredient0_stop_var.get(),ingredient0_weight_percent_var.get(),ingredient0_pH_start_var.get(),ingredient0_pH_stop_var.get(),ingredient0_volume_percent_var.get(),ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get(),ingredient1_pH_start_var.get(),ingredient1_pH_stop_var.get(),ingredient1_volume_percent_var.get(),ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get(),ingredient2_pH_start_var.get(),ingredient2_pH_stop_var.get(),ingredient2_volume_percent_var.get(),ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get(),ingredient3_pH_start_var.get(),ingredient3_pH_stop_var.get(),ingredient3_volume_percent_var.get(),steps=int(steps_var.get()))).grid(row=50,column=0)
+            tk.Button(optimization_screen_frame,text='Add selection to custom screen',command=lambda:save_condition_settings(ingredient0_var.get(),ingredient0_start_var.get(),ingredient0_stop_var.get(),ingredient0_weight_percent_var.get(),ingredient0_pH_start_var.get(),ingredient0_pH_stop_var.get(),ingredient0_volume_percent_var.get(),ingredient1_var.get(),ingredient1_start_var.get(),ingredient1_stop_var.get(),ingredient1_weight_percent_var.get(),ingredient1_pH_start_var.get(),ingredient1_pH_stop_var.get(),ingredient1_volume_percent_var.get(),ingredient2_var.get(),ingredient2_start_var.get(),ingredient2_stop_var.get(),ingredient2_weight_percent_var.get(),ingredient2_pH_start_var.get(),ingredient2_pH_stop_var.get(),ingredient2_volume_percent_var.get(),ingredient3_var.get(),ingredient3_start_var.get(),ingredient3_stop_var.get(),ingredient3_weight_percent_var.get(),ingredient3_pH_start_var.get(),ingredient3_pH_stop_var.get(),ingredient3_volume_percent_var.get(),steps=int(steps_var.get()))).grid(row=50,column=0)
 
-            tk.Button(optimization_screen_frame,text='Finish optimization screen',command=lambda:save_screen()).grid(row=51,column=0)
+            tk.Button(optimization_screen_frame,text='Finish custom screen',command=lambda:save_screen()).grid(row=51,column=0)
 
             def save_condition_settings(ingredient0,ingredient0_start,ingredient0_stop,ingredient0_weight_percent,ingredient0_pH_start,ingredient0_pH_stop,ingredient0_volume_percent,
                                         ingredient1,ingredient1_start,ingredient1_stop,ingredient1_weight_percent,ingredient1_pH_start,ingredient1_pH_stop,ingredient1_volume_percent,
@@ -1440,7 +1434,7 @@ class CrystalDex_main:
                 current_condition_number = len(self.optimization_conditions.keys())
                 for condition_number in range(current_condition_number,current_condition_number+steps):
                     if condition_number<=95:
-                        self.optimization_conditions[condition_number] = f'{condition_number+1}) '
+                        self.optimization_conditions[condition_number] = f'{condition_number+1} '
                         for condition in condition_instructions:
                             if '' not in condition[0:4]:
                                 new_ingredient_id = condition[0]
@@ -1459,7 +1453,7 @@ class CrystalDex_main:
                                     new_condition_pH = round(condition_number*(float(condition[5])-float(condition[4]))/(steps-1)+float(condition[4]),2)
                                     self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f' pH {new_condition_pH}, '
                     else:
-                        messagebox.showerror(title="Optimization Conditions Full",message="There is no more room to add conditions to this screen.")
+                        messagebox.showerror(title="custom Conditions Full",message="There is no more room to add conditions to this screen.")
 
                 for condition in range(len(self.optimization_conditions)):
                     conditions_listbox.delete(condition)
