@@ -118,10 +118,10 @@ def reset_db():
                 subwell TEXT NOT NULL,
                 picture_path TEXT NOT NULL,
                 conditions TEXT NOT NULL,
-                minor_axis REAL NOT NULL,
-                major_axis REAL NOT NULL,
-                number_of_crystals INT NOT NULL,
-                shape TEXT NOT NULL,
+                minor_axis REAL,
+                major_axis REAL,
+                number_of_crystals INT,
+                shape TEXT,
                 possible_salt_crystals TEXT NOT NULL,
                 precipitation TEXT NOT NULL,
                 microcrystals TEXT NOT NULL,
@@ -140,6 +140,16 @@ def reset_db():
     conn.close()
 
 #reset_db()
+
+def get_runs():
+    conn = connect_to_db()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    query = f"SELECT DISTINCT run FROM crystals"
+    cur.execute(query)
+    runs = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return runs
 
 def get_crystal_screens():
     """Get a list of all crystal screens and their ids."""
@@ -490,7 +500,7 @@ class CrystalDex_main:
         time.sleep(0.1)
         print(f'monitor mouse is done.')
 
-    def add_tray(self,crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0):
+    def add_tray(self,crystal_screen_id,chaperone,crystal_screen,protein,custom_tags,top_left=0,top_right=0,bottom_left=0,date_set="00-00-0000"):
         """This adds a crystal tray to the CrystalDex database. It is usually called by the Index_Tray function and it 
         routes into the characterize_crystals function.
         For reference, this is how the crystal_trays table is made:
@@ -513,6 +523,23 @@ class CrystalDex_main:
             if not make_new_anyway:
                 self.Index_Tray('old')
             else:
+                if "" not in [crystal_screen,protein] and sum(1 for conc in [top_left,top_right,bottom_left] if conc!=0)>=1:
+                    conn = connect_to_db()
+                    cur = conn.cursor()
+                    cur.execute("""
+                    INSERT INTO crystal_trays
+                    (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
+                    self.tray_id = str(cur.lastrowid).strip()
+                    conn.commit()
+                    conn.close()
+                    self.characterize_crystal(method="new")
+                else:
+                    messagebox.showerror(title="Missing Information",message="Please fill out all required fields and put in at least one protein concentration.")
+                    return
+        else:
+            if "" not in [crystal_screen,protein] and sum(1 for conc in [top_left,top_right,bottom_left] if conc!=0)>=1:
                 conn = connect_to_db()
                 cur = conn.cursor()
                 cur.execute("""
@@ -524,22 +551,18 @@ class CrystalDex_main:
                 conn.commit()
                 conn.close()
                 self.characterize_crystal(method="new")
-        else:
-            conn = connect_to_db()
-            cur = conn.cursor()
-            cur.execute("""
-            INSERT INTO crystal_trays
-            (crystal_screen_id, date_set, chaperone, crystal_screen, protein, custom_tags, top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (crystal_screen_id,date_set,chaperone,crystal_screen,protein,custom_tags,top_left,top_right,bottom_left))
-            self.tray_id = str(cur.lastrowid).strip()
-            conn.commit()
-            conn.close()
-            self.characterize_crystal(method="new")
+            else:
+                messagebox.showerror(title="Missing Information",message="Please fill out all required fields and put in at least one protein concentration.")
+                return
 
 
     def Index_Tray(self,method):
         """This is the GUI method for editing the crystal trays in the database or adding new ones. It is called into from the startup function and routes into the add_tray function or into the edit_tray function."""
+        screens = get_crystal_screens()
+        if len(screens) == 0:
+            messagebox.showerror(title="No Crystal Screens",message="No crystal screens have been uploaded. Upload one and try again.")
+            self.startup()
+            return
         if method == "new":
             self.clear_widgets()
             self.add_menu()
@@ -613,22 +636,42 @@ class CrystalDex_main:
             custom_tags_var = tk.StringVar()
             custom_tags_drop_down = ttk.Combobox(new_tray_frame,textvariable=custom_tags_var,values=custom_tags_values)
             custom_tags_drop_down.grid(column=2,row=12)
-
+            def verify_screen(screen_var):
+                if screen_var.get()=="":
+                    messagebox.showerror(title="No Crystal Screen",message="You did not enter a crystal screen. Please fill out all requred information and try again.")
+                    return
+                else:
+                    return screen_var.get()
             def verify_conc(conc_var):
                 if conc_var.get() == "":
                     return 0
                 else:
-                    return float(conc_var.get())
-
-            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(crystal_screen_dict[crystal_screen_var.get()],
-                                                                                    date_set_var.get(),
+                    try:
+                        return float(conc_var.get())
+                    except Exception as e:
+                        messagebox.showerror(title="Invalid concentration entry",message="One or more of your concentration entries is invalid. Please ensure that all concentrations are numbers and try again.")
+                        return
+            def verify_date(date_set_var):
+                date_set = date_set_var.get()
+                if date_set == "":
+                    messagebox.showerror(title="No Date Entry",message="You did not enter a date. Please do so and try again.")
+                    return
+                else:
+                    try:
+                        time.strptime(date_set,'%m-%d-%Y')
+                        return date_set
+                    except Exception:
+                        messagebox.showerror(title="Invalid Date",message="Your date entry is invalid. Please try again with the 00-00-0000 format.")
+                        return
+            tk.Button(new_tray_frame,text="Make new tray",command=lambda: self.add_tray(crystal_screen_dict[verify_screen(crystal_screen_var)],
                                                                                    chaperone_var.get(),
                                                                                    crystal_screen_var.get(),
                                                                                    protein_var.get(),
                                                                                    custom_tags_var.get(),
                                                                                    top_left=verify_conc(protein_top_left_concentration_var),
                                                                                    top_right=verify_conc(protein_top_right_concentration_var),
-                                                                                   bottom_left=verify_conc(protein_bottom_left_concentration_var)
+                                                                                   bottom_left=verify_conc(protein_bottom_left_concentration_var),
+                                                                                   date_set=verify_date(date_set_var)
                                                                                    )).grid(column=1,row=13,sticky='W')
 
             for child in new_tray_frame.winfo_children():
@@ -655,7 +698,7 @@ class CrystalDex_main:
             old_tray_frame = ttk.Frame(self.root,padding="3 3 12 12")
             old_tray_frame.grid(column=0,row=0,sticky='nw')
             old_tray_frame.columnconfigure(0,minsize=450)
-            filter_button = tk.Button(old_tray_frame,text="Filter",command=lambda:reget_trays()).grid(column=0,row=3,sticky='W')
+            tk.Button(old_tray_frame,text="Filter",command=lambda:reget_trays()).grid(column=1,row=3,sticky='W')
 
             date_set_values = [str(datetime.now().strftime('%m-%d-%Y'))]
             today_label = ttk.Label(old_tray_frame,text="Today?")
@@ -708,19 +751,18 @@ class CrystalDex_main:
                 runs = [0]
                 run_drop_down = ttk.Combobox(old_tray_frame,textvariable=run,values=runs)
                 run_drop_down.grid(column=0,row=7)
-                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),int(run.get()))).grid(column=0,row=8)
+                tk.Button(old_tray_frame,text="Harvest from Selected Tray for Selected Beamline Run",command=lambda: select_old_tray(tray_var.get(),run.get())).grid(column=0,row=8)
             else:
                 tk.Button(old_tray_frame,text="Update Selected Tray",command=lambda: select_old_tray(tray_var.get())).grid(column=0,row=6)
 
             def select_old_tray(tray_var,run=None):
                 self.tray_id = tray_var.split(", ")[0]
                 if run is not None:
-                    self.run = run
-                    print(f'self.run = {self.run}')
                     if run=="":
                         messagebox.showerror(title="Empty Beamline Run",message="Please enter a valid Beamline Run number.")
-                        self.Index_Tray("harvesting")
+                        return
                     else:
+                        self.run = int(run)
                         self.characterize_crystal("harvesting")
                 else:
                     self.characterize_crystal("old")
@@ -807,7 +849,19 @@ class CrystalDex_main:
         well_column_drop_down.grid(column=2,row=3)
 
         subwell = tk.StringVar()
-        subwell_values = ['top_left','top_right','bottom_left']
+        
+        conn = connect_to_db()
+        cur = conn.cursor()
+        cur.execute("""SELECT DISTINCT top_left_protein_concentration, top_right_protein_concentration, bottom_left_protein_concentration
+                    FROM crystal_trays WHERE id=?""",(self.tray_id,))
+        rows = cur.fetchall()
+        conn.close()
+        concs = {}
+        for r in rows:
+            concs["top_left"] = r[0]
+            concs["top_right"] = r[1]
+            concs['bottom_left'] = r[2]
+        subwell_values = [conc for conc in concs.keys() if concs[conc]!=0]
         subwell_label = ttk.Label(crystal_frame,text="subwell:")
         subwell_label.grid(column=1,row=4)
         subwell_drop_down = ttk.Combobox(crystal_frame,textvariable=subwell,values=subwell_values,state='readonly')
@@ -893,7 +947,10 @@ class CrystalDex_main:
         notes.grid(column=1,row=14+x,columnspan=2)
 
         def get_condition_number(well_row,well_column):
-            return (well_column-1)*8+column_index_from_string(well_row)
+            if well_row!="" and well_column!=0:
+                return (well_column-1)*8+column_index_from_string(well_row)
+            else:
+                return
 
         def get_condition():
             print(f'tray_id: {self.tray_id}')
@@ -947,6 +1004,15 @@ class CrystalDex_main:
 
     def take_picture(self,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,run,vial,date_snapped,notes, method):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
+        if "" not in [row,subwell,condition] and column!=0:
+            pass
+        else:
+            messagebox.showerror(title="Incomplete Characterization",message="Please fill out all required fields and try again.")
+            return
+        if method=="harvesting":
+            if self.crystal_size[1] == 0:
+                messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly! Try again.")
+                return
         image_title = f'{self.tray_id}_{row}{column}_{subwell}_{date_snapped}'
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
@@ -963,10 +1029,6 @@ class CrystalDex_main:
             if prev_len_desktop_files != len_desktop_files:
                 unsaved=False
                 time.sleep(0.1)
-
-        if method=="harvesting":
-            if self.crystal_size[1] == 0:
-                messagebox.showerror(title='No crystal measurement',message="You haven't measured your crystal, silly!")
         
         suffixes = ['.jpeg','.jpg','.bmp','.tif','']
         file_path_possibilities = [os.path.join(desktop,image_title+suffix) for suffix in suffixes]
@@ -1480,22 +1542,16 @@ class CrystalDex_main:
         self.current_frame = crystal_transfer_frame
         crystal_transfer_frame.grid(column=0,row=0,sticky='nw')
 
-        def get_runs():
-            conn = connect_to_db()
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            query = f"SELECT DISTINCT run FROM crystals"
-            cur.execute(query)
-            runs = [row[0] for row in cur.fetchall()]
-            conn.close()
-            return runs
-
         runs = get_runs()
+        if len(runs)==0:
+            messagebox.showerror(title="No Runs!",message="You can't transfer; you don't have any runs.")
+            self.startup()
+            return
         run = tk.StringVar()
-        ttk.Label(crystal_transfer_frame, text="Select the current run:").grid(column=1,row=1)
-        ttk.Combobox(crystal_transfer_frame,values=runs,textvariable=run).grid(column=1,row=2)
-        ttk.Button(crystal_transfer_frame,text="Transfer Crystals in Selected Run",command=lambda:transfer(int(run.get()))).grid(column=1,row=3)
-        
+        ttk.Label(crystal_transfer_frame,text=f"Current run: {max(runs)}").grid(column=1,row=1)
+        ttk.Button(crystal_transfer_frame,text="Transfer crystals in current run",command=lambda:transfer(int(run.get()),method='current')).grid(column=1,row=2)
+        ttk.Button(crystal_transfer_frame,text="Transfer crystals from an old run to the current run",command=lambda:transfer(method='old')).grid(column=1,row=4)
+
         def get_vials_and_ports(run):
             conn = connect_to_db()
             conn.row_factory = sqlite3.Row
@@ -1506,12 +1562,23 @@ class CrystalDex_main:
             conn.close()
             return vials_and_ports
 
-        def transfer(run):
+        def transfer(run=None,method=None):
             self.clear_widgets()
             self.add_menu()
             transfer_frame = ttk.Frame(self.root,padding="3 3 12 12")
             self.current_frame = transfer_frame
             transfer_frame.grid(column=0,row=0,sticky='nw')
+
+            if run==None:
+                ttk.Label(crystal_transfer_frame, text="Select the old run to transfer crystals from:").grid(column=1,row=1)
+                ttk.Combobox(crystal_transfer_frame,values=runs,textvariable=run).grid(column=1,row=2)
+                transfer(run,method='old')
+
+            wi = 0
+            if method=="current":
+                wi = 800
+            else:
+                wi = 500
 
             vials_and_ports = get_vials_and_ports(run)
 
@@ -1524,41 +1591,66 @@ class CrystalDex_main:
 
             transfer_tree.heading("vial", text="Vial")
             transfer_tree.heading("port", text="Port")
+            transfer_tree.column("vial", width=wi)
+            transfer_tree.column("port", width=wi)
 
-            transfer_tree.column("vial", width=800)
-            transfer_tree.column("port", width=800)
+            if method=="old":
+                transfer_tree.heading("transfer_b",text="Transfer to current run?")
+                transfer_tree.column("transfer_b",width=wi)
 
             transfer_tree.grid(row=0, column=0)
 
             for vial, port in vials_and_ports.items():
-                transfer_tree.insert("","end",values=(vial,port))
+                if method=="current":
+                    transfer_tree.insert("","end",values=(vial,port))
+                elif method=="old":
+                    transfer_tree.insert("","end",values=(vial,port,False))
             scrollbar = ttk.Scrollbar(transfer_frame, orient="vertical",command=transfer_tree.yview)
             transfer_tree.configure(yscrollcommand=scrollbar.set)
             scrollbar.grid(row=0,column=1,sticky="ns")
 
             def on_select(event):
-                selected = transfer_tree.selection()
-                if not selected:
-                    return
-                item = selected[0]
-                #values = transfer_tree.item(item, "values")
+                if method=="current":
+                    selected = transfer_tree.selection()
+                    if not selected:
+                        return
+                    item = selected[0]
+                    #values = transfer_tree.item(item, "values")
 
-                x, y, width, height = transfer_tree.bbox(item, "#2")
+                    x, y, width, height = transfer_tree.bbox(item, "#2")
 
-                value = transfer_tree.set(item, "port")
+                    value = transfer_tree.set(item, "port")
 
-                entry = ttk.Entry(transfer_tree)
-                entry.place(x=x, y=y, width=width, height=height)
-                entry.insert(0, value)
-                entry.focus()
-                def save_edit(event=None):
-                    transfer_tree.set(item, "port", entry.get())
-                    entry.destroy()
-                entry.bind("<Return>", save_edit)
-                entry.bind("<FocusOut>", save_edit)
+                    entry = ttk.Entry(transfer_tree)
+                    entry.place(x=x, y=y, width=width, height=height)
+                    entry.insert(0, value)
+                    entry.focus()
+                    def save_edit(event=None):
+                        transfer_tree.set(item, "port", entry.get())
+                        entry.destroy()
+                    entry.bind("<Return>", save_edit)
+                    entry.bind("<FocusOut>", save_edit)
+                elif method=="old":
+                    selected = transfer_tree.selection()
+                    if not selected:
+                        return
+                    item = selected[0]
+                    x, y, width, height = transfer_tree.bbox(item, "#3")
+                    transfer_b = tk.BooleanVar()
+                    entry = ttk.Checkbutton(transfer_tree,variable=transfer_b,onvalue=True,offvalue=False)
+                    entry.place(x=x, y=y, width=width, height=height)
+                    entry.focus()
+                    def save_edit(event=None):
+                        transfer_tree.set(item, "transfer_b", entry.get())
+                        entry.destroy()
+                    entry.bind("<Return>", save_edit)
+                    entry.bind("<FocusOut>", save_edit)
             transfer_tree.bind("<<TreeviewSelect>>", on_select)
 
-            ttk.Button(transfer_frame,text="Save, Print Run Sheet, and Return to Startup Menu",command=lambda:save()).grid(column=0,row=2)
+            if method=='current':
+                ttk.Button(transfer_frame,text="Save, Print Run Sheet, and Return to Startup Menu",command=lambda:save()).grid(column=0,row=2)
+            elif method=='old':
+                ttk.Button(transfer_frame,text="Move crystals to current run",command=lambda:move()).grid(column=0,row=2)
 
             def save():
                 updates = []
@@ -1569,6 +1661,20 @@ class CrystalDex_main:
                 conn = connect_to_db()
                 cur = conn.cursor()
                 cur.executemany("""UPDATE crystals SET port=? WHERE run=? AND vial=?""",updates)
+                conn.commit()
+                conn.close()
+                self.run_sheet(run)
+                self.startup()
+
+            def move():
+                updates = []
+                for item in transfer_tree.get_children():
+                    vial, transfer_b = transfer_tree.item(item, "values")
+                    updates.append((port, run, int(vial)))
+                print(f'updates: {updates}')
+                conn = connect_to_db()
+                cur = conn.cursor()
+                cur.executemany("""UPDATE crystals SET port=?, run=? WHERE run=? AND vial=?""",updates)
                 conn.commit()
                 conn.close()
                 self.run_sheet(run)
