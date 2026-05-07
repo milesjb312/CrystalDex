@@ -201,13 +201,31 @@ def get_trays(args_dict=None):
     trays = [(", ".join(str(item) for item in row)) for row in rows]
     return trays
 
-def get_vials_and_ports(run):
+def get_vials_and_details(run):
+    """Runs the following sqlite3 query and returns a dictionary: {"vial":[port,"protein","conditions","notes"]}
+
+    SELECT 
+        crystals.vial,
+        crystals.port,
+        crystal_trays.protein,
+        crystals.conditions,
+        crystals.notes
+        FROM crystals JOIN crystal_trays ON crystals.tray_id = crystal_trays.id WHERE crystals.run=?
+    """
     conn = connect_to_db()
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
-    query = f"SELECT vial, port, notes FROM crystals WHERE run=?"
+    query = """
+    SELECT 
+        crystals.vial,
+        crystals.port,
+        crystal_trays.protein,
+        crystals.conditions,
+        crystals.notes
+        FROM crystals JOIN crystal_trays ON crystals.tray_id = crystal_trays.id WHERE crystals.run=?
+    """
     cur.execute(query,(run,))
-    vials_and_ports = {row[0]:row[1] for row in cur.fetchall()}
+    vials_and_ports = {row[0]:[row[1],row[2],row[3],row[4]] for row in cur.fetchall()}
     conn.close()
     return vials_and_ports
 
@@ -1578,47 +1596,55 @@ class CrystalDex_main:
                 tk.Button(transfer_frame,text="Transfer from selected tray",command=lambda:transfer(int(run.get()),method='old')).grid(column=1,row=3)
                 return
 
-            wi = 0
-            if method=="current":
-                wi = 800
-            else:
-                wi = 500
+            wi = 330
 
-            vials_and_ports = get_vials_and_ports(run)
+            vials_and_ports = get_vials_and_details(run)
             transfer_tree=None
 
             if method=="current":
                 transfer_tree = ttk.Treeview(
                     transfer_frame,
-                    columns=("vial", "port"),
+                    columns=("vial", "port", "protein", "conditions", "notes"),
                     show="headings",
                     height=25
                 )
 
                 transfer_tree.heading("vial", text="Vial")
                 transfer_tree.heading("port", text="Port")
+                transfer_tree.heading("protein", text="Protein")
+                transfer_tree.heading("conditions", text="Conditions")
+                transfer_tree.heading("notes", text="Notes")
                 transfer_tree.column("vial", width=wi)
                 transfer_tree.column("port", width=wi)
+                transfer_tree.column("protein", width=wi)
+                transfer_tree.column("conditions", width=wi)
+                transfer_tree.column("notes", width=wi)
 
             elif method=="old":
                 transfer_tree = ttk.Treeview(
                     transfer_frame,
-                    columns=("vial", "transfer_b"),
+                    columns=("vial", "transfer_b", "protein", "conditions", "notes"),
                     show="headings",
                     height=25
                 )
                 transfer_tree.heading("vial", text="Vial")
                 transfer_tree.heading("transfer_b",text="Transfer to current run?")
+                transfer_tree.heading("protein", text="Protein")
+                transfer_tree.heading("conditions", text="Conditions")
+                transfer_tree.heading("notes", text="Notes")
                 transfer_tree.column("vial", width=wi)
                 transfer_tree.column("transfer_b",width=wi)
+                transfer_tree.column("protein", width=wi)
+                transfer_tree.column("conditions", width=wi)
+                transfer_tree.column("notes", width=wi)
 
             transfer_tree.grid(row=0, column=0)
 
-            for vial, port, notes in vials_and_ports.items():
+            for vial, details in vials_and_ports.items():
                 if method=="current":
-                    transfer_tree.insert("","end",values=(vial,port))
+                    transfer_tree.insert("","end",values=(vial,details[0],details[1],details[2],details[3]))
                 elif method=="old":
-                    transfer_tree.insert("","end",values=(vial,"False"))
+                    transfer_tree.insert("","end",values=(vial,"False",details[1],details[2],details[3]))
             scrollbar = ttk.Scrollbar(transfer_frame, orient="vertical",command=transfer_tree.yview)
             transfer_tree.configure(yscrollcommand=scrollbar.set)
             scrollbar.grid(row=0,column=1,sticky="ns")
@@ -1672,7 +1698,7 @@ class CrystalDex_main:
             def save():
                 updates = []
                 for item in transfer_tree.get_children():
-                    vial, port = transfer_tree.item(item, "values")
+                    vial, port, protein, conditions, notes = transfer_tree.item(item, "values")
                     updates.append((port, run, int(vial)))
                 print(f'updates: {updates}')
                 conn = connect_to_db()
@@ -1684,15 +1710,22 @@ class CrystalDex_main:
                 self.startup()
 
             def move():
+                current_run_vials_and_ports = get_vials_and_details(max(runs))
+                next_vial = 0
+                for vial in current_run_vials_and_ports.keys():
+                    if int(vial)>next_vial:
+                        next_vial = int(vial)+1
                 updates = []
                 for item in transfer_tree.get_children():
-                    vial, transfer_b = transfer_tree.item(item, "values")
+                    vial, transfer_b, protein, conditions, notes = transfer_tree.item(item, "values")
+                    new_note = f"Old run and vial: ({run}, {vial})"
                     if transfer_b=="True":
-                        updates.append((max(runs), run, int(vial)))
+                        updates.append((next_vial, max(runs), new_note, run, int(vial)))
+                        next_vial+=1
                 print(f'updates: {updates}')
                 conn = connect_to_db()
                 cur = conn.cursor()
-                cur.executemany("""UPDATE crystals SET run=? WHERE run=? AND vial=?""",updates)
+                cur.executemany("""UPDATE crystals SET vial = ?, run=?, notes = ? || notes WHERE run=? AND vial=?""",updates)
                 conn.commit()
                 conn.close()
                 self.run_sheet(run)
