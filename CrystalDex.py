@@ -335,46 +335,6 @@ def update_excel():
                 )
     shutil.move(temp_library,server_library)
 
-def correct_conditions():
-    conn = connect_to_db()
-    cur = conn.cursor()
-
-    cur.execute("""
-    SELECT
-        c.id,
-        c.row,
-        c.column,
-        t.crystal_screen_id
-    FROM crystals c
-    JOIN crystal_trays t
-        ON c.tray_id = t.id
-    """)
-
-    for crystal_id, row, column, screen_id in cur.fetchall():
-
-        condition_number = (
-            column_index_from_string(row) - 1
-        ) * 12 + column
-
-        cur.execute("""
-        SELECT condition
-        FROM conditions
-        WHERE crystal_screen_id = ?
-        AND condition_number = ?
-        """, (screen_id, condition_number))
-
-        condition = cur.fetchone()[0]
-
-        cur.execute("""
-        UPDATE crystals
-        SET conditions = ?
-        WHERE id = ?
-        """, (condition, crystal_id))
-
-    conn.commit()
-    conn.close()
-correct_conditions()
-
 """MICROSCOPE APP FUNCTIONS"""
 #In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
 def on_click(x,y,button,pressed):
