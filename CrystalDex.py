@@ -54,6 +54,7 @@ os.makedirs(server_dir,exist_ok=True)
 crystal_pictures = os.path.join(server_dir,'Resources',"Crystal_Pictures")
 os.makedirs(crystal_pictures,exist_ok=True)
 server_library = os.path.join(server_dir,"CrystalDex_Library.xlsx")
+temp_library = os.path.join(script_dir,"CrystalDex_Library.xlsx")
 run_sheet = os.path.join(server_dir,"Run.xlsx")
 desktop = os.path.expanduser("~/Desktop")
 
@@ -265,7 +266,6 @@ def update_excel():
         t.top_right_protein_concentration,
         t.bottom_left_protein_concentration,
         c.id AS crystal_id,
-        c.tray_id AS crystal_tray_id,
         c.row,
         c.column,
         c.subwell,
@@ -285,10 +285,11 @@ def update_excel():
         c.port,
         c.date_snapped,
         c.notes
-        FROM crystal_trays t JOIN crystals c ON t.id = c.tray_id""", conn)
+        FROM crystals c JOIN crystal_trays t ON c.tray_id = t.id
+        ORDER BY c.tray_id, c.id""", conn)
     conn.close()
 
-    with pd.ExcelWriter(server_library, engine="openpyxl",mode="w") as writer:
+    with pd.ExcelWriter(temp_library, engine="openpyxl",mode="w") as writer:
         if df.empty:
             pd.DataFrame({"info": ["No data available"]}).to_excel(
                 writer,
@@ -307,7 +308,7 @@ def update_excel():
                 protein = str(row["protein"])
 
                 # --- Build sheet name (Excel max 31 chars) ---
-                base_name = f"{date_set}_{protein}"
+                base_name = f"{date_set}_{row["crystal_screen"][0:2]}_{protein}"
                 sheet_name = base_name[:31]
 
                 # --- Create header (single-row dataframe) ---
@@ -332,6 +333,47 @@ def update_excel():
                     startrow=3,  # leave space after header
                     index=False
                 )
+    shutil.move(temp_library,server_library)
+
+def correct_conditions():
+    conn = connect_to_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    SELECT
+        c.id,
+        c.row,
+        c.column,
+        t.crystal_screen_id
+    FROM crystals c
+    JOIN crystal_trays t
+        ON c.tray_id = t.id
+    """)
+
+    for crystal_id, row, column, screen_id in cur.fetchall():
+
+        condition_number = (
+            column_index_from_string(row) - 1
+        ) * 12 + column
+
+        cur.execute("""
+        SELECT condition
+        FROM conditions
+        WHERE crystal_screen_id = ?
+        AND condition_number = ?
+        """, (screen_id, condition_number))
+
+        condition = cur.fetchone()[0]
+
+        cur.execute("""
+        UPDATE crystals
+        SET conditions = ?
+        WHERE id = ?
+        """, (condition, crystal_id))
+
+    conn.commit()
+    conn.close()
+correct_conditions()
 
 """MICROSCOPE APP FUNCTIONS"""
 #In the future, this can be used to allow new users to reconfigure the buttonpresses that are simulated on whatever microscope they're using.
@@ -979,7 +1021,7 @@ class CrystalDex_main:
 
         def get_condition_number(well_row,well_column):
             if well_row!="" and well_column!=0:
-                return (well_column-1)*8+column_index_from_string(well_row)
+                return (column_index_from_string(well_row)-1)*12+well_column
             else:
                 return
 
@@ -989,6 +1031,7 @@ class CrystalDex_main:
             cur = conn.cursor()
             crystal_screen = get_crystal_screen(self.tray_id)
             condition_number = get_condition_number(well_row.get(),int(well_column.get()))
+            print(f'condition_number: {well_row.get(),well_column.get(),condition_number}')
             cur.execute("""SELECT condition FROM conditions WHERE crystal_screen_id = ? AND condition_number = ?""",(crystal_screen,condition_number))
             condition_args = cur.fetchone()
             conn.close()
@@ -1048,6 +1091,7 @@ class CrystalDex_main:
         self.SeBaView_wrapper.maximize()
         self.SeBaView_wrapper.set_focus()
         safe_click(self.SeBaView_wrapper,(55,70))
+        time.sleep(2)
         safe_click(self.SeBaView_wrapper,(750,450))#This is supposed to access the Desktop tk.Button to save the photos.
         time.sleep(1)
         desktop_files = [f for f in os.listdir(desktop) if os.path.isfile(os.path.join(desktop, f))]

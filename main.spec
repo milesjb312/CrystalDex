@@ -12,7 +12,6 @@ a = Analysis(
     ('Resources/Crystal_Screens.json','Resources'),
     ('Resources/crystaldex_icon.png','Resources'),
     ('Resources/crystaldex_icon.ico','Resources'),
-    ('CrystalDex_Library.xlsx','.'),
     ('Resources/CrystalDex_Splash.png','Resources'),
     ('CS_FS.xlsx','.'),
     ('Index_FS_2021.xlsx','.'),
