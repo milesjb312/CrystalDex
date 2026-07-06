@@ -166,7 +166,7 @@ def get_crystal_screens():
 def get_crystal_screen(tray_id):
     conn = connect_to_db()
     cur = conn.cursor()
-    cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(tray_id))
+    cur.execute("""SELECT crystal_screen_id FROM crystal_trays WHERE id = ?""",(tray_id,))
     crystal_screen_id = cur.fetchone()
     conn.close()
     if crystal_screen_id is None:
@@ -1026,6 +1026,9 @@ class CrystalDex_main:
         if method=="harvesting":
             tk.Button(crystal_frame,text = 'Take picture and proceed to next well',
                       command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),self.run,int(vial.get()),get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
+            tk.Button(crystal_frame,text = "Delete previous picture (crystal was not harvested)",
+                      command = lambda: self.delete_picture()).grid(column=1,row=17+x)
+            x+=1
         else:
             tk.Button(crystal_frame,text = 'Take picture and proceed to next well',
                       command = lambda: self.take_picture(well_row.get(),well_column.get(),subwell.get(),get_condition(),get_minor_axis(),get_major_axis(),number_of_crystals.get(),shape.get(),possible_salt_crystals.get(),precipitation.get(),microcrystals.get(),glassy_protein_or_artifacts.get(),get_harvester(),0,0,get_date_snapped(),notes.get("1.0", "end-1c"),method)).grid(column=1,row=16+x)
@@ -1035,7 +1038,29 @@ class CrystalDex_main:
         
         for child in crystal_frame.winfo_children():
             child.grid_configure(padx=5,pady=10)
+    
+    def delete_picture(self,crystal_id=""):
+        crystal_id = crystal_id
+        if crystal_id=="":
+            if not self.picture_taken:
+                return
+            else:
+                conn = connect_to_db()
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                query = """SELECT * FROM crystals ORDER BY id DESC LIMIT 1"""
+                cur.execute(query)
+                crystal_id = cur.fetchone()[0]
+                conn.close()
 
+        conn = connect_to_db()
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        query = """DELETE FROM crystals where id = ?"""
+        print(f'crystal_id to delete: {crystal_id}')
+        cur.execute(query,(crystal_id,))
+        conn.close()
+            
     def take_picture(self,row,column,subwell,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,run,vial,date_snapped,notes, method):
         """This is the pride and jewel of CrystalDex, which allows users to take a picture, name it, and upload it all at once without any extra hassle."""
         if "" not in [row,subwell,condition] and column!=0:
@@ -1115,7 +1140,8 @@ class CrystalDex_main:
                     possible_salt_crystals, precipitation, microcrystals, glassy_protein_or_artifacts, harvester, run, vial, date_snapped, notes) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (self.tray_id,row,column,subwell,picture_path,condition,minor_axis,major_axis,number_of_crystals,shape,possible_salt_crystals,precipitation,microcrystals,glassy_protein_or_artifacts,harvester,run,vial,date_snapped,notes))
         conn.commit()
-        conn.close()        
+        conn.close()
+        self.picture_taken = True    
 
     def measure_crystal(self,function_to_run):
         """This is one of the best features of CrystalDex! However, it does need a calibrate tk.Button. Currently, it only works for the microscope
@@ -1740,16 +1766,21 @@ class CrystalDex_main:
         conn = connect_to_db()
 
         df = pd.read_sql_query("""SELECT
-        t.id AS tray_id,
+        c.vial AS Vial,
         t.protein AS Protein,
-        c.id AS Crystal_id,
-        c.tray_id AS Crystal_tray_id,
         c.conditions AS Conditions,
         c.shape AS Shape,
+        c.minor_axis AS Minor_axis,
+        c.major_axis AS Major_axis,
         c.harvester AS Harvester,
+        c.notes AS Notes,
         c.run AS Run,
-        c.port AS Port
-        FROM crystal_trays t JOIN crystals c ON t.id = c.tray_id""", conn)
+        t.id AS tray_id,
+        c.tray_id AS Crystal_tray_id,
+        t.date_set AS Date_set,
+        c.date_snapped AS Date_snapped,
+        c.port as Port
+        FROM crystals c JOIN crystal_trays t ON t.id = c.tray_id""", conn)
         conn.close()
 
         df = df[df["Run"] == run]
@@ -1762,8 +1793,15 @@ class CrystalDex_main:
                     index=False
                 )
             else:
+                """
+                df['Picture'] = df['Picture'].apply(
+                    lambda x: f'=HYPERLINK("{os.path.join(crystal_pictures,x)}", "Open Image")' if pd.notnull(x) else ""
+                )
+                """
+                df.insert(7,"Date Set/Date harvested",df["Date_set"].astype(str) + "/" + df["Date_snapped"].astype(str))
                 base_name = f"Run {run}"
                 sheet_name = base_name[:31]
+                df = df.drop(columns=["Run","tray_id","Crystal_tray_id","Date_set","Date_snapped"])
                 df.to_excel(
                     writer,
                     sheet_name=sheet_name,

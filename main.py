@@ -6,6 +6,7 @@ import atexit
 import psutil
 from CrystalDex import CrystalDex_main
 from CrystalDex import update_excel
+from CrystalDex import get_runs
 
 LOCK_FILE = os.path.join(tempfile.gettempdir(),"CrystalDex.lock")
 
@@ -39,4 +40,6 @@ elif __name__ == '__main__':
     app.root.after_idle(app.refocus)
     app.root.mainloop()
     update_excel()
-    
+    app.run = get_runs()
+    if isinstance(app.run[-1],int):
+        app.run_sheet(app.run[-1])
