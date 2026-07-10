@@ -1090,7 +1090,7 @@ class CrystalDex_main:
                 unsaved=False
                 time.sleep(0.1)
         
-        suffixes = ['.jpeg','.jpg','.bmp','.tif','']
+        suffixes = ['.jpeg','.jpg','.bmp','.tif','.png','']
         file_path_possibilities = [os.path.join(desktop,image_title+suffix) for suffix in suffixes]
         moved = False
         for file_path in file_path_possibilities:
