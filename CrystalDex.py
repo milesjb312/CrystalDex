@@ -1344,21 +1344,24 @@ class CrystalDex_main:
         tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
 
         def add_screen(crystal_screen_name,crystal_screen_symbol):
+            self.crystal_screen_name = crystal_screen_name
             current_screens = get_crystal_screens()
-            if crystal_screen_name.get() not in current_screens.keys():
+            if crystal_screen_name not in current_screens.keys():
                 conn = connect_to_db()
                 cur = conn.cursor()
-                cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name.get(),crystal_screen_symbol.get()))
+                cur.execute("""INSERT INTO crystal_screens (crystal_screen,crystal_screen_symbol) VALUES (?, ?)""",(crystal_screen_name,crystal_screen_symbol))
                 conn.commit()
                 conn.close()
+                select_reference()
             else:
-                crystal_screen_id = current_screens[crystal_screen_name.get()]
+                crystal_screen_id = current_screens[crystal_screen_name]
                 conn = connect_to_db()
                 cur = conn.cursor()
                 print(f'crystal_screen_id: {crystal_screen_id} type: {type(crystal_screen_id)}')
                 cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(str(crystal_screen_id)))
                 conn.commit()
                 conn.close()
+                select_reference()
 
         def select_reference():
             self.clear_widgets()
@@ -1564,7 +1567,7 @@ class CrystalDex_main:
                                 new_condition_start = float(condition[1])
                                 new_condition_stop = float(condition[2])
                                 new_condition_step = (new_condition_stop-new_condition_start)/(steps-1)
-                                new_condition_concentration = condition_number*new_condition_step+new_condition_start
+                                new_condition_concentration = (condition_number-current_condition_number)*new_condition_step+new_condition_start
                                 self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f'{round(new_condition_concentration,2)}'
                                 if condition[3]:
                                     self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f' % w/v {new_ingredient_id} '
@@ -1573,7 +1576,7 @@ class CrystalDex_main:
                                 else:
                                     self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f' M {new_ingredient_id} '
                                 if '' not in condition[4:6]:
-                                    new_condition_pH = round(condition_number*(float(condition[5])-float(condition[4]))/(steps-1)+float(condition[4]),2)
+                                    new_condition_pH = round((condition_number-current_condition_number)*(float(condition[5])-float(condition[4]))/(steps-1)+float(condition[4]),2)
                                     self.optimization_conditions[condition_number] = self.optimization_conditions[condition_number]+f' pH {new_condition_pH}, '
                     else:
                         messagebox.showerror(title="custom Conditions Full",message="There is no more room to add conditions to this screen.")
