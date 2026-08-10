@@ -1341,6 +1341,9 @@ class CrystalDex_main:
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
+        conditions = ['' for _ in range(96)]
+        conditions_var = tk.StringVar(value=conditions)
+
         tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
 
         def add_screen(crystal_screen_name,crystal_screen_symbol):
@@ -1448,7 +1451,7 @@ class CrystalDex_main:
             ingredient0_weight_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='weight percent',variable=ingredient0_weight_percent_var,onvalue=True,offvalue=False)
             ingredient0_weight_percent_checkbutton.grid(row=10,column=6)
             ingredient0_volume_percent_var = tk.BooleanVar(value=False)
-            ingredient0_volume_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='volume percent',variable=ingredient0_weight_percent_var,onvalue=True,offvalue=False)
+            ingredient0_volume_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='volume percent',variable=ingredient0_volume_percent_var,onvalue=True,offvalue=False)
             ingredient0_volume_percent_checkbutton.grid(row=10,column=7)
 
             ttk.Label(optimization_screen_frame,text='Ingredient 1:').grid(row=11,column=0)
@@ -1520,8 +1523,6 @@ class CrystalDex_main:
             ingredient3_volume_percent_checkbutton = ttk.Checkbutton(optimization_screen_frame,text='volume percent',variable=ingredient3_volume_percent_var,offvalue=False,onvalue=True)
             ingredient3_volume_percent_checkbutton.grid(row=13,column=7)
             
-            conditions = ['' for _ in range(96)]
-            conditions_var = tk.StringVar(value=conditions)
             conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
             conditions_listbox.grid(row=14,column=0,columnspan=3)
 
