@@ -1361,7 +1361,7 @@ class CrystalDex_main:
                 conn = connect_to_db()
                 cur = conn.cursor()
                 print(f'crystal_screen_id: {crystal_screen_id} type: {type(crystal_screen_id)}')
-                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(str(crystal_screen_id)))
+                cur.execute("""DELETE FROM conditions WHERE crystal_screen_id=?""",(crystal_screen_id,))
                 conn.commit()
                 conn.close()
                 select_reference()
