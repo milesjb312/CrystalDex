@@ -43,6 +43,7 @@ import ctypes
 import pyautogui
 from pynput import mouse
 import pywinauto.keyboard
+from scrape_maketray import scrape_maketray
 
 #Packaging stuff:
 #https://realpython.com/pyinstaller-python/
@@ -1341,7 +1342,7 @@ class CrystalDex_main:
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
-        conditions = ['' for _ in range(96)]
+        conditions = [self.optimization_conditions.get(index, '') for index in range(96)]
         conditions_var = tk.StringVar(value=conditions)
 
         tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
@@ -1424,7 +1425,8 @@ class CrystalDex_main:
             "Currently, you can only have one step assignment per ingredient (pH and concentration must have equal steps)").grid(row=6,column=0,columnspan=20,sticky='nw')
             ttk.Label(optimization_screen_frame,text='Please enter in the relevant information for each condition.').grid(row=7,column=0,columnspan=20,sticky='w')
             ttk.Label(optimization_screen_frame,text=f'Ingredient Name').grid(row=9,column=1,sticky='we')
-            ttk.Label(optimization_screen_frame,text=f'Steps (Up to {96-len(self.optimization_conditions)})').grid(row=9,column=2)
+            step_limit_label = ttk.Label(optimization_screen_frame,text=f'Steps (Up to {96-len(self.optimization_conditions)})')
+            step_limit_label.grid(row=9,column=2)
             ttk.Label(optimization_screen_frame,text='Concentration Start (Molar default)').grid(row=9,column=3)
             ttk.Label(optimization_screen_frame,text='Concentration Stop (Molar default)').grid(row=9,column=4)
             ttk.Label(optimization_screen_frame,text='pH Start (None default)').grid(row=9,column=5)
@@ -1536,6 +1538,41 @@ class CrystalDex_main:
             conditions_listbox = tk.Listbox(optimization_screen_frame,listvariable=conditions_var,height=25,width=150)
             conditions_listbox.grid(row=14,column=0,columnspan=3)
 
+            def refresh_conditions_list():
+                conditions_listbox.delete(0,tk.END)
+                for condition_number in range(96):
+                    conditions_listbox.insert(tk.END,self.optimization_conditions.get(condition_number,''))
+                step_limit_label.configure(text=f'Steps (Up to {96-len(self.optimization_conditions)})')
+
+            def import_hampton_conditions():
+                available_slots = 96-len(self.optimization_conditions)
+                if available_slots == 0:
+                    messagebox.showerror(title="Custom Conditions Full",message="All 96 conditions are already filled.")
+                    return
+                try:
+                    scraped_conditions = scrape_maketray()
+                except Exception as e:
+                    messagebox.showerror(title="Make Tray Import Failed",message=str(e))
+                    return
+
+                if len(scraped_conditions) > available_slots:
+                    messagebox.showerror(
+                        title="Not Enough Empty Conditions",
+                        message=f"This Make Tray contains {len(scraped_conditions)} conditions, but only {available_slots} slots remain.",
+                    )
+                    return
+
+                for condition in scraped_conditions.values():
+                    condition_number = len(self.optimization_conditions)
+                    self.optimization_conditions[condition_number] = f'{condition_number+1} {condition}'
+                refresh_conditions_list()
+
+            ttk.Button(
+                optimization_screen_frame,
+                text="Import from Hampton Make Tray",
+                command=import_hampton_conditions,
+            ).grid(row=2,column=0,sticky='nw')
+
             edited_condition = tk.StringVar()
             condition_entry = tk.Entry(optimization_screen_frame, textvariable=edited_condition, width=150)
             condition_entry.grid(row=15, column=0, columnspan=3)
@@ -1613,9 +1650,7 @@ class CrystalDex_main:
                     else:
                         messagebox.showerror(title="custom Conditions Full",message="There is no more room to add conditions to this screen.")
 
-                for condition in range(len(self.optimization_conditions)):
-                    conditions_listbox.delete(condition)
-                    conditions_listbox.insert(condition, self.optimization_conditions[condition])
+                refresh_conditions_list()
 
             def save_screen():
                 crystal_screens = get_crystal_screens()
