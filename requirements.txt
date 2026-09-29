@@ -12,8 +12,6 @@ numpy==2.4.4
 openpyxl==3.1.5
 packaging==25.0
 pandas==3.0.2
-pdfminer.six==20250506
-pdfplumber==0.11.7
 pefile==2023.2.7
 pillow==11.3.0
 psutil==7.0.0
