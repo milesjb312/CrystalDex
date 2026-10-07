@@ -1342,8 +1342,7 @@ class CrystalDex_main:
         two_code_entry = tk.Entry(optimization_screen_frame,textvariable=two_code)
         two_code_entry.grid(row=2,column=1)
 
-        conditions = [self.optimization_conditions.get(index, '') for index in range(96)]
-        conditions_var = tk.StringVar(value=conditions)
+        conditions_var = tk.StringVar(value=[self.optimization_conditions.get(index, '') for index in range(96)])
 
         tk.Button(optimization_screen_frame,text='Continue',command=lambda: add_screen(long_name_entry.get(),two_code_entry.get())).grid(row=3,column=0)
 
@@ -1580,19 +1579,24 @@ class CrystalDex_main:
             self.index = None
             def select_condition(event):
                 selection = conditions_listbox.curselection()
-                if selection:
-                    edited_condition.set(f'{conditions[selection[0]+1]}')
-                    self.index = selection[0]
+                if not selection:
+                    return
+
+                self.index = selection[0]
+                value = self.optimization_conditions.get(self.index, "")
+                edited_condition.set(value.partition(" ")[2] if value else "")
 
             conditions_listbox.bind('<<ListboxSelect>>',select_condition)
 
             def overwrite():
-                if self.index:
-                    text = edited_condition.get()
-                    conditions[self.index-1] = text
-                    conditions_listbox.delete(self.index)
-                    conditions_listbox.insert(self.index, f'{self.index+1} {text}')
-                    
+                if self.index is None or self.index not in self.optimization_conditions:
+                    return
+
+                text = f"{self.index + 1} {edited_condition.get()}"
+                self.optimization_conditions[self.index] = text
+                conditions_listbox.delete(self.index)
+                conditions_listbox.insert(self.index, text)
+                                    
             tk.Button(optimization_screen_frame,text='overwrite',command=overwrite).grid(row=15,column=3)
 
             tk.Button(optimization_screen_frame,text='Add selection to custom screen',command=lambda:save_condition_settings(
